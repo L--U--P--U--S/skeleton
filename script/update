@@ -1,0 +1,11 @@
+#!/bin/bash
+# Make sure all dependencies are up-to-date
+
+set -o errexit
+set -o nounset
+
+cd "$(dirname "$0")/.."
+
+script/bootstrap
+
+echo "==> Everything is up-to-date"

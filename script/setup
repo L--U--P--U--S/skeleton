@@ -1,0 +1,11 @@
+#!/bin/bash
+# Set up the source after the initial clone
+
+set -o errexit
+set -o nounset
+
+cd "$(dirname "$0")/.."
+
+script/bootstrap
+
+echo "==> Everything is ready to go"

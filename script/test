@@ -1,0 +1,15 @@
+#!/bin/bash
+# run the test suite
+
+set -o errexit
+if [ ! -z "$DEBUG" ]; then
+    set -o xtrace
+fi
+set -o nounset
+
+cd "$(dirname "$0")/.."
+script/update
+
+echo "==> Running tests"
+
+nosetests

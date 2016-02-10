@@ -1,0 +1,12 @@
+#!/bin/bash
+# Make sure all required dependencies are installed
+
+set -o errexit
+set -o nounset
+
+cd "$(dirname "$0")/.."
+
+if [ -f "requirements.txt" ]; then
+    echo "==> Installing/upgrading the required Python dependencies"
+    pip install --upgrade -r requirements.txt
+fi
