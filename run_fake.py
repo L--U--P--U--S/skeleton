@@ -7,7 +7,7 @@ import argparse
 from antismash import __version__
 from antismash.log import setup_logging
 from antismash.config import load_config, set_config
-from antismash.plugins import load_plugins, check_prereqs
+from antismash.plugins import load_plugins, check_prereqs, get_versions
 
 
 def main():
@@ -55,15 +55,12 @@ def main():
     setup_logging(options)
 
     #if -V, show version texts and exit
-    if options.version:
-        print "fake antiSMASH %s" % __version__
+    if options.version and not (options.debug or options.verbose):
+        print("fake antiSMASH {}".format(__version__))
         sys.exit(0)
-
-    logging.info('Starting up')
 
     load_config(options)
     set_config(options)
-
 
     #Load plugins
     logging.debug("Loading available plugins")
@@ -71,6 +68,14 @@ def main():
 
     if options.list_plugins:
         list_plugins(plugins)
+        sys.exit(0)
+
+    if options.version and (options.debug or options.verbose):
+        versions = get_versions(plugins, options)
+        print("fake antiSMASH {}".format(__version__))
+        print("Identified dependencies:")
+        for version in versions:
+            print("    {}".format(version))
         sys.exit(0)
 
     #Check prerequisites
