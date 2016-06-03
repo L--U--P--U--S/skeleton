@@ -1,16 +1,21 @@
 #!/usr/bin/env python
+'''CLI interface for antiSMASH'''
+from __future__ import print_function
 
 import sys
 import logging
 import argparse
+import multiprocessing
 
-from antismash import __version__
+from antismash import __version__, utils
 from antismash.log import setup_logging
 from antismash.config import load_config, set_config
 from antismash.plugins import load_plugins, check_prereqs, get_versions
+from antismash.core import run_antismash
 
 
 def main():
+    '''Configure and parse the CLI'''
     parser = argparse.ArgumentParser()
 
     # we actually want at least 1 sequence file, but don't wanto to check here
@@ -33,6 +38,16 @@ def main():
                         dest='logfile',
                         default=argparse.SUPPRESS,
                         help="Also write logging output to a file.")
+    parser.add_argument('-o', '--outputfolder',
+                        dest='outputfoldername',
+                        default=argparse.SUPPRESS,
+                        help='Directory to write results to.')
+    parser.add_argument('--cpus',
+                        dest='cpus',
+                        type=int,
+                        default=multiprocessing.cpu_count(),
+                        help='How many CPUs to use in parallel (default: {})'.format(
+                            multiprocessing.cpu_count()))
     parser.add_argument('--list-plugins',
                         dest='list_plugins',
                         action='store_true',
@@ -91,6 +106,11 @@ def main():
 
     if not options.sequences:
         parser.error("Please specify at least one sequence file")
+
+    utils.create_outputfolder(options)
+
+    seq_records = utils.parse_input_sequences(options)
+    run_antismash(seq_records, plugins, options)
 
 
 def list_plugins(plugins):
