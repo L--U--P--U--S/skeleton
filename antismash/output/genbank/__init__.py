@@ -11,6 +11,12 @@ short_description = "GenBank output"
 priority = 1
 
 
+def check_prereqs(options):
+    '''Check if all dependencies are met'''
+    # We have no dependencies besides BioPython, so if we got here, we're fine.
+    return []
+
+
 def write(seq_records, options):
     '''Write GenBank records'''
     basename = seq_records[0].id
