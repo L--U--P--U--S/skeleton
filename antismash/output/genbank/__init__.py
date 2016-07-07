@@ -3,6 +3,7 @@ import logging
 import warnings
 from os import path
 
+import helperlibs
 from helperlibs.bio import seqio
 from antismash import utils
 
@@ -15,6 +16,14 @@ def check_prereqs(options):
     '''Check if all dependencies are met'''
     # We have no dependencies besides BioPython, so if we got here, we're fine.
     return []
+
+
+def get_versions(options):
+    '''Get all utility versions'''
+    versions = [
+        'bioinf-helperlibs {}'.format(helperlibs.version),
+    ]
+    return versions
 
 
 def write(seq_records, options):
