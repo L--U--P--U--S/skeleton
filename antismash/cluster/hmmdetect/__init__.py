@@ -30,7 +30,7 @@ _required_binaries = [
 
 _required_files = [
     'hmmdetails.txt',
-    'cluster_details.txt',
+    'cluster_rules.txt',
     'filterhmmdetails.txt',
 ]
 
@@ -94,14 +94,14 @@ def check_prereqs(options):
 
     lineno = 1
     for line in open(utils.get_full_path(__file__, 'cluster_rules.txt'), 'r'):
-        if line.count('\t') != 4:
+        if line.count('\t') != 3:
             failure_messages.append('Failed to use cluster rules from line {lineno} due to misformatting:\n{line!r}'.format(
                 line=line, lineno=lineno))
         lineno += 1
 
     lineno = 1
     for line in open(utils.get_full_path(__file__, 'hmmdetails.txt'), 'r'):
-        if line.count('\t') != 4:
+        if line.count('\t') != 3:
             failure_messages.append('Failed to load HMM profile settings from line {lineno} due to misformatting:\n{line!r}'.format(
                 line=line, lineno=lineno))
         lineno += 1
