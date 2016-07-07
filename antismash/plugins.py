@@ -21,7 +21,16 @@ def load_plugins():
 
 def check_prereqs(plugins, options):
     '''Check if all prerequisites are met'''
-    return []
+    missing_prereqs = []
+
+    for _, plugin_list in plugins.iteritems():
+        for plugin in plugin_list:
+            missing_prereqs.extend(plugin.check_prereqs(options))
+
+    # remove duplicates
+    missing_prereqs = list(set(missing_prereqs))
+    missing_prereqs.sort()
+    return missing_prereqs
 
 
 def get_versions(plugins, options):
