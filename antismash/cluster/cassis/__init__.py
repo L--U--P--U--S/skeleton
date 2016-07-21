@@ -24,8 +24,8 @@ short_description = "{}: Detect secondary metabolite gene cluster (motif based)"
 priority = 2 # first run hmmdetect plugin to detect core genes (anchor genes) --> seed for cluster prediction with cassis
 
 _required_binaries = [
-    ('meme', '4.9.1'), # meme -version; 4.9.1 --> oldest version known to work; 4.11.1 --> newest version known to work and used for testing
-    ('fimo', '4.9.1'), # fimo -version; same ...
+    ('meme', '4.11.1'),
+    ('fimo', '4.11.1'),
 ]
 
 
