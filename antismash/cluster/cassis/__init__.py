@@ -8,12 +8,12 @@
 # License: GNU Affero General Public License v3 or later
 # A copy of GNU AGPL v3 should have been included in this software package in LICENSE.txt.
 
-"""Load sequences from a local file
-
-"""
+"""Load sequences from a local file"""
 import logging
 import Bio
 from Bio.SeqFeature import SeqFeature, FeatureLocation
+from Bio import SeqIO
+from Bio.SeqRecord import SeqRecord
 from antismash import (
     config,
     utils,
@@ -24,88 +24,457 @@ short_description = "{}: Detect secondary metabolite gene cluster (motif based)"
 priority = 2 # first run hmmdetect plugin to detect core genes (anchor genes) --> seed for cluster prediction with cassis
 
 _required_binaries = [
-    ('meme', '4.11.1'),
-    ('fimo', '4.11.1'),
+    ("meme", "4.11.1"),
+    ("fimo", "4.11.1"),
 ]
 
 
 def check_prereqs(options):
-    '''Check for prerequisites'''
+    """Check for prerequisites"""
     failure_messages = []
     for binary_name, binary_version in _required_binaries:
         if utils.locate_executable(binary_name) is None:
-            failure_messages.append('Failed to locate executable for {!r}'.format(binary_name))
+            failure_messages.append("Failed to locate executable for {!r}".format(binary_name))
         # TODO: Check binary version here
 
     return failure_messages
 
+def get_all_anchor_genes(seq_record):
+    """Return all genes which are putative cluster anchor genes"""
+    anchor_genes = []
+
+    for feature in seq_record.features:
+        if "sec_met" in feature.qualifiers:
+            anchor_genes.append(feature.qualifiers["locus_tag"])
+
+    return anchor_genes
+
+def ignore_overlapping_genes(genes):
+    """Ignore genes with overlapping locations (skip the second one of an overlapping couple)"""
+
+    ignored = 0
+
+    overlap = True
+    while overlap: # check again until we didn't find any overlap in the entire (remaining) gene list
+        overlap = False
+        non_overlapping = [genes[0]]
+
+        for i in xrange(1, len(genes)):
+            # TODO seq_record/genes is sorted by start coordinates? if no: have to consider more cases!
+            if (genes[i-1].location.end >= genes[i].location.start) or (genes[i-1].location.start <= genes[i].location.start and genes[i-1].location.end >= genes[i].location.end):
+                # A <----->                                             A <---------->
+                # B    <----->                                          B   <----->
+                logging.warning("Ignoring {} (overlapping with {})".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # # TODO info or warning?
+                ignored += 1
+                overlap = True
+            else:
+                non_overlapping.append(genes[i])
+
+        genes = non_overlapping
+
+    if ignored:
+        logging.info("Ignoring {} genes due to overlapping locations".format(ignored))
+
+    return genes
+
+
+def get_all_promoters(seq_record, upstream_tss, downstream_tss, options):
+    """Compute promoter sequences for each gene"""
+    logging.info("Computing promoter sequences")
+
+    min_promoter_length = 6
+    max_promoter_length = (upstream_tss + downstream_tss) * 2 + 1
+
+    genes = ignore_overlapping_genes(utils.get_all_features_of_type(seq_record, "gene"))
+    contig_length = len(seq_record.seq) # TODO is 1 seq_record == 1 contig always true?
+    promoters = []
+    invalid = 0
+
+    # TODO "format()" or "%s" or "s + s"?
+    pos_handle = open("{}/{}_promoter_positions.csv".format(options.outputfoldername, seq_record.name), "w")
+    pos_handle.write("\t".join(["#", "promoter", "start", "end", "length"]) + "\n")
+    seq_handle = open("{}/{}_promoter_sequences.fasta".format(options.outputfoldername, seq_record.name), "w")
+
+    skip = 0 # helper var for shared promoter of bidirectional genes
+    for i in xrange(len(genes)):
+
+        if skip: # two genes share the same promotor --> did computation with first gene, skip second gene
+            skip = 0
+
+        elif len(genes) == 1: # only one gene within record
+
+            if genes[i].location.strand == 1:
+                if genes[i].location.start - upstream_tss >= 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": 1, # TODO 0? --> "Note that the start and end location numbering follow Python's scheme, thus a GenBank entry of 123..150 (one based counting) becomes a location of [122:150] (zero based counting)."
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i].location.start - upstream_tss >= 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.end
+                    })
+                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": 1,
+                        "end": genes[i].location.end
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i])) # TODO logging.error --> die?
+
+            elif genes[i].location.strand == -1:
+                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #4
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > contig_length: #5
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": contig_length
+                    })
+                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #6
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i+1].location.start >= genes[i].location.end - upstream_tss and genes[i].location.end + upstream_tss > contig_length: #8
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": contig_length
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+        # first gene of the record AND NOT special case #9
+        elif ( i == 0 and i != len(genes) ) and not ( genes[i].location.strand == -1 and genes[i+1].location.strand == 1 and genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss ):
+
+            if genes[i].location.strand == 1:
+                if genes[i].location.start - upstream_tss >= 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": 1,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i].location.start - upstream_tss >= 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.end
+                    })
+                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": 1,
+                        "end": genes[i].location.end
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+            elif genes[i].location.strand == -1:
+                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #4
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start <= genes[i].location.end + upstream_tss: #5
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": genes[i+1].location.start - 1
+                    })
+                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #6
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.start >= genes[i].location.end - downstream_tss: #8
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": genes[i+1].location.start - 1
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+        # last gene of record
+        elif i == len(genes) and not skip:
+
+            if genes[i].location.strand == 1:
+                if genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i-1].location.end + 1,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.end
+                    })
+                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i-1].location.end + 1,
+                        "end": genes[i].location.end
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+            elif genes[i].location.strand == -1:
+                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #4
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > contig_length: #5
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": contig_length
+                    })
+                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length : #6
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.end + upstream_tss > contig_length: #8
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": contig_length
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+        # special-case 9
+        elif genes[i].location.strand == -1 and genes[i+1].location.strand == 1 and genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss:
+            if genes[i].location.end > genes[i].location.start + downstream_tss and genes[i].location.start < genes[i].location.end - downstream_tss: #9 (1+4)
+                promoters.append({
+                    "id": "{}+{}".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])),
+                    "start": genes[i].location.end - downstream_tss,
+                    "end": genes[i+1].location.start + downstream_tss
+                })
+            elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start + downstream_tss >= genes[i+1].end: #9 (3+4)
+                promoters.append({
+                    "id": "{}+{}".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])),
+                    "start": genes[i].location.end - downstream_tss,
+                    "end": genes[i+1].end
+                })
+            elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].end > genes[i+1].location.start + downstream_tss: #9 (1+6)
+                promoters.append({
+                    "id": "{}+{}".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])),
+                    "start": genes[i].location.start,
+                    "end": genes[i+1].location.start + downstream_tss
+                })
+            elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].location.start + downstream_tss >= genes[i+1].end: #9 (3+6)
+                promoters.append({
+                    "id": "{}+{}".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])),
+                    "start": genes[i].location.start,
+                    "end": genes[i+1].end
+                })
+            else:
+                logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+            skip = 1
+
+        # "normal" cases
+        elif not skip:
+
+            if genes[i].location.strand == 1:
+                if genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i-1].location.end + 1,
+                        "end": genes[i].location.start + downstream_tss
+                    })
+                elif genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start - upstream_tss,
+                        "end": genes[i].location.end
+                    })
+                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i-1].location.end + 1,
+                        "end": genes[i].location.end
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+            elif genes[i].location.strand == -1:
+                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #4
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start <= genes[i].location.end + upstream_tss: #5
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.end - downstream_tss,
+                        "end": genes[i+1].location.start - 1
+                    })
+                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #6
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": genes[i].location.end + upstream_tss
+                    })
+                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.start >= genes[i].location.end - downstream_tss: #8
+                    promoters.append({
+                        "id": utils.get_gene_id(genes[i]),
+                        "start": genes[i].location.start,
+                        "end": genes[i+1].location.start - 1
+                    })
+                else:
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+
+        # negative start position or stop position "beyond" record --> might happen in very small records
+        if promoters[-1]["start"] < 1:
+            promoters[-1]["start"] = 1
+        if promoters[-1]["end"] > contig_length:
+            promoters[-1]["end"] = contig_length
+
+        # write promoter positions and sequences to file
+        if not skip:
+            promoter_sequence = seq_record.seq[promoters[-1]["start"]:promoters[-1]["end"]+1]
+            promoter_length = len(promoter_sequence)
+
+            invalid_promoter_sequence = ""
+
+            # check if promoter length is valid
+            if promoter_length < min_promoter_length or promoter_length > max_promoter_length:
+                invalid_promoter_sequence = "length"
+
+            # check if a, c, g and t occur at least once in the promoter sequence
+            elif "A" not in promoter_sequence:
+                invalid_promoter_sequence = "A"
+            elif "C" not in promoter_sequence:
+                invalid_promoter_sequence = "C"
+            elif "G" not in promoter_sequence:
+                invalid_promoter_sequence = "G"
+            elif "T" not in promoter_sequence:
+                invalid_promoter_sequence = "T"
+                # TODO always capital letters?
+
+            if invalid_promoter_sequence:
+                invalid += 1
+
+                if invalid_promoter_sequence == "length":
+                    logging.warning("Promoter %s is invalid (length is %s)", promoters[-1]["id"], promoter_length)
+                else:
+                    logging.warning("Promoter %s is invalid (sequence without %s)", promoters[-1]["id"], invalid_promoter_sequence) # especially SiTaR doesn't like such missings
+
+                promoters.pop() # remove last (invalid!) promoter
+
+            else:
+                # write promoter positions to file
+                pos_handle.write("\t".join(map(str, [len(promoters), promoters[-1]["id"], promoters[-1]["start"], promoters[-1]["end"], promoter_length])) + "\n")
+
+                # write promoter sequences to file
+                SeqIO.write(SeqRecord(promoter_sequence, id = promoters[-1]["id"], description = "length={}bp".format(promoter_length)), seq_handle, "fasta")
+
+        # check if promoter IDs are unique
+        if len(promoters) >= 2 and promoters[-1]["id"] == promoters[-2]["id"]:
+            logging.error("Promoter %s occurs at least twice. This may be caused by overlapping gene annotations", promoters[-1]["id"])
+            # TODO die? raise exception?
+
+    if invalid:
+        logging.info("Ignoring {} promoters due to invalid promoter sequences".format(invalid))
+
+    logging.info("Found {} promoter sequences for {} genes".format(len(promoters), len(genes)))
+    return promoters
+
+
 def detect(seq_record, options):
-    # TODO just get core genes from hmmdetect --> cassis input
-    pass
-#    '''Detect signature genes using HMM profiles'''
-#    logging.info('Detecting gene clusters using HMM library')
-#    feature_by_id = utils.get_feature_dict(seq_record)
-#    full_fasta = utils.get_multifasta(seq_record)
-#    rulesdict = create_rules_dict()
-#    results = []
-#    sig_by_name = {}
-#    results_by_id = {}
-#    runresults = utils.run_hmmsearch(utils.get_full_path(__file__, 'bgc_seeds.hmm'), full_fasta, use_tempfile=True)
-#    for sig in _signature_profiles:
-#        sig_by_name[sig.name] = sig
-#
-#    logging.debug(sig_by_name.keys())
-#    for runresult in runresults:
-#        #Store result if it is above cut-off
-#        for hsp in runresult.hsps:
-#            try:
-#                sig = sig_by_name[hsp.query_id]
-#            except KeyError:
-#                logging.error('BUG: Failed to find signature for ID %s', hsp.query_id)
-#                continue
-#            if hsp.bitscore > sig.cutoff:
-#                results.append(hsp)
-#                if hsp.hit_id not in results_by_id:
-#                    results_by_id[hsp.hit_id] = [hsp]
-#                else:
-#                    results_by_id[hsp.hit_id].append(hsp)
-#
-#    #Filter results by comparing scores of different models (for PKS systems)
-#    results, results_by_id = filter_results(results, results_by_id)
-#
-#    #Use rules to determine gene clusters
-#    typedict = apply_cluster_rules(results_by_id, feature_by_id, rulesdict, inclusive=options.inclusive)
-#
-#    #Find number of sequences on which each pHMM is based
-#    nseqdict = get_nseq()
-#
-#    #Save final results to seq_record
-#    for cds in results_by_id.keys():
-#        feature = feature_by_id[cds]
-#        if typedict[cds] != "none":
-#            _update_sec_met_entry(feature, results_by_id[cds], typedict[cds], nseqdict)
-#
-#    find_clusters(seq_record, rulesdict)
-#
-#    #Find additional NRPS/PKS genes in gene clusters
-#    add_additional_nrpspks_genes(typedict, results_by_id, seq_record, nseqdict)
-#
-#    #Add details of gene cluster detection to cluster features
-#    store_detection_details(rulesdict, seq_record)
-#
-#    #If all-orfs option on, remove irrelevant short orfs
-#    if options.all_orfs:
-#        remove_irrelevant_allorfs(seq_record)
+    """Predict SM gene clusters using CASSIS (cluster assignment by islands of sites)"""
+    logging.info("Detecting gene clusters using CASSIS method")
+
+    # TODO options? cassis settings/parameters?
+
+    # print dir(seq_record)
+    # ['__add__', '__bool__', '__class__', '__contains__', '__delattr__', '__dict__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__iter__', '__le___', '__len__', '__lt__', '__module__', '__ne__', '__new__', '__nonzero__', '__radd__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_per_letter_annotations', '_seq', '_set_per_letter_annotations', '_set_seq', 'annotations', 'dbxrefs', 'description', 'features', 'format', 'id', 'letter_annotations', 'lower', 'name', 'reverse_complement', 'seq', 'upper']
+
+    # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
+    anchor_genes = get_all_anchor_genes(seq_record)
+
+    # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
+    upstream_tss = 1000; # nucleotides upstream TSS
+    downstream_tss = 50; # nucleotides downstream TSS
+    promoters = get_all_promoters(seq_record, upstream_tss, downstream_tss, options)
+
+    if len(promoters) < 40:
+        logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection with CASSIS on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
+
+    if len(promoters) < 3:
+        logging.error("Sequence {!r} yields less than 3 promoter regions. Skipping CASSIS cluster detection".format(seq_record.name))
+    else:
+        find_clusters(seq_record, anchor_genes, options)
 
 
 def get_versions(options):
-    '''Get all utility versions'''
+    """Get all utility versions"""
+    # TODO meme, fimo, …
     return []
 
 
-def find_clusters(seq_record, rulesdict):
+def find_clusters(seq_record, anchor_genes, options):
+    """Use core genes (anchor genes) as seeds to detect gene clusters"""
     # TODO main cassis method!?
-    pass
+    for anchor in anchor_genes:
+        pass
+
+        # TODO check for anchor promoter sequence
+        # die "The promoter sequence of the anchor gene is invalid." . "\n$error_long" . "\nStopped"
+        # if ( $backbone_id and $promoters[-1]{ID} =~ m/(^\Q$backbone_id\E$)|(^\Q$backbone_id+\E)|(\Q+$backbone_id\E$)/ );
+
+        # TODO current promoter ID includes anchor gene ID --> save number of promoter including the anchor gene
+        # warning: the promoter ID string is not equal to the anchor ID string, nor the promoter sequence header! (it's somewhere "in between")
+        # regex = r"^+" + re.escape(anchor
+        # if not anchor_promoter and promoters[-1]["id"] =~ m/(^\Q$backbone_id\E$)|(^\Q$backbone_id+\E)|(\Q+$backbone_id\E$)/ )
+        # {
+            # $backbone_promoter_nr = @promoters;
+        # }
+
+
 
 
 #    #Functions that detects the gene clusters based on the identified core genes
