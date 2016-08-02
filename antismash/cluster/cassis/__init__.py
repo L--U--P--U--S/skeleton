@@ -45,7 +45,7 @@ def get_all_anchor_genes(seq_record):
 
     for feature in seq_record.features:
         if "sec_met" in feature.qualifiers:
-            anchor_genes.append(feature.qualifiers["locus_tag"])
+            anchor_genes.append(feature.qualifiers["locus_tag"][0])
 
     return anchor_genes
 
@@ -458,9 +458,9 @@ def get_versions(options):
 
 def find_clusters(seq_record, anchor_genes, options):
     """Use core genes (anchor genes) as seeds to detect gene clusters"""
-    # TODO main cassis method!?
-    for anchor in anchor_genes:
-        pass
+
+    # for anchor in anchor_genes:
+        # regex = r"(^" + re.escape(anchor[0]) + r"$)|(^" + re.escape(anchor) + re.escape("+") + r"|(" + re.escape("+" + anchor[0]) + r"$)"
 
         # TODO check for anchor promoter sequence
         # die "The promoter sequence of the anchor gene is invalid." . "\n$error_long" . "\nStopped"
