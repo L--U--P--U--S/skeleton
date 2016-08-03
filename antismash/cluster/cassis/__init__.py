@@ -14,10 +14,12 @@ import Bio
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
+import re
 from antismash import (
     config,
     utils,
 )
+
 
 name = "cassis"
 short_description = "{}: Detect secondary metabolite gene cluster (motif based)".format(name)
@@ -442,12 +444,12 @@ def detect(seq_record, options):
     promoters = get_all_promoters(seq_record, upstream_tss, downstream_tss, options)
 
     if len(promoters) < 40:
-        logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection with CASSIS on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
+        logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
 
     if len(promoters) < 3:
-        logging.error("Sequence {!r} yields less than 3 promoter regions. Skipping CASSIS cluster detection".format(seq_record.name))
+        logging.error("Sequence {!r} yields less than 3 promoter regions. Skipping cluster detection".format(seq_record.name))
     else:
-        find_clusters(seq_record, anchor_genes, options)
+        find_clusters(promoters, anchor_genes, options)
 
 
 def get_versions(options):
@@ -456,23 +458,22 @@ def get_versions(options):
     return []
 
 
-def find_clusters(seq_record, anchor_genes, options):
+def find_clusters(promoters, anchor_genes, options):
     """Use core genes (anchor genes) as seeds to detect gene clusters"""
 
-    # for anchor in anchor_genes:
-        # regex = r"(^" + re.escape(anchor[0]) + r"$)|(^" + re.escape(anchor) + re.escape("+") + r"|(" + re.escape("+" + anchor[0]) + r"$)"
+    for anchor in anchor_genes:
+        logging.info("Detecting cluster of anchor gene {}".format(anchor))
 
-        # TODO check for anchor promoter sequence
-        # die "The promoter sequence of the anchor gene is invalid." . "\n$error_long" . "\nStopped"
-        # if ( $backbone_id and $promoters[-1]{ID} =~ m/(^\Q$backbone_id\E$)|(^\Q$backbone_id+\E)|(\Q+$backbone_id\E$)/ );
+        anchor_promoter = None
+        for i in xrange(0, len(promoters)):
+            # the promoter ID string is not equal to the anchor ID string! (it's somewhere "in between")
+            # ----> TODO save gene(s!) of promoter region as list as promoter id? <-------
+            if re.search(r"(^" + re.escape(anchor) + r"$)|(^" + re.escape(anchor + "+") + r")|(" + re.escape("+" + anchor) + r"$)", promoters[i]["id"]):
+                anchor_promoter = i
 
-        # TODO current promoter ID includes anchor gene ID --> save number of promoter including the anchor gene
-        # warning: the promoter ID string is not equal to the anchor ID string, nor the promoter sequence header! (it's somewhere "in between")
-        # regex = r"^+" + re.escape(anchor
-        # if not anchor_promoter and promoters[-1]["id"] =~ m/(^\Q$backbone_id\E$)|(^\Q$backbone_id+\E)|(\Q+$backbone_id\E$)/ )
-        # {
-            # $backbone_promoter_nr = @promoters;
-        # }
+        if not anchor_promoter:
+            logging.warning("No promoter region for {}, skipping".format(anchor))
+            continue
 
 
 
