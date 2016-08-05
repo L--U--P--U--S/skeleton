@@ -8,7 +8,8 @@
 # License: GNU Affero General Public License v3 or later
 # A copy of GNU AGPL v3 should have been included in this software package in LICENSE.txt.
 
-"""Load sequences from a local file"""
+"""Implementation of the CASSIS method for the motif-based prediction of SM gene clusters"""
+
 import logging
 import Bio
 from Bio import SeqIO
@@ -64,6 +65,7 @@ def get_anchor_genes(seq_record):
 
 
 def get_promoter_id(promoter):
+    """Return promoter ID string dependend on involved gene(s)"""
     if len(promoter["id"]) == 1: # 1 gene --> 1 promoter
         return promoter["id"][0]
     else: # 2 bidirectional genes --> 1 shared promoter
@@ -71,8 +73,7 @@ def get_promoter_id(promoter):
 
 
 def ignore_overlapping(genes):
-    """Ignore genes with overlapping locations (skip the second one of an overlapping couple)"""
-
+    """Ignore genes with overlapping locations (skip the second gene of an overlapping couple)"""
     ignored = 0
 
     overlap = True
@@ -100,7 +101,7 @@ def ignore_overlapping(genes):
 
 
 def get_promoters(seq_record, upstream_tss, downstream_tss, options):
-    """Compute promoter sequences for each gene"""
+    """Compute promoter sequences for each gene in the sequence record"""
     logging.info("Computing promoter sequences")
 
     min_promoter_length = 6
@@ -537,7 +538,7 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
 
 
 def detect(seq_record, options):
-    """Predict SM gene clusters using CASSIS (cluster assignment by islands of sites)"""
+    """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
     logging.info("Detecting gene clusters using CASSIS method")
 
     # TODO options? cassis settings/parameters?
@@ -557,42 +558,33 @@ def detect(seq_record, options):
     downstream_tss = 50; # nucleotides downstream TSS
     promoters = get_promoters(seq_record, upstream_tss, downstream_tss, options)
 
-    if len(promoters) < 40:
-        logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
-
     if len(promoters) < 3:
         logging.error("Sequence {!r} yields less than 3 promoter regions. Skipping cluster detection".format(seq_record.name))
     else:
-        find_clusters(promoters, anchor_genes, options) # TODO move content of find_clusters() to detect()?
+        if len(promoters) < 40:
+            logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
+
+        for anchor in anchor_genes:
+            logging.info("Detecting cluster around anchor gene {}".format(anchor))
+
+            anchor_promoter = None
+            for i in xrange(0, len(promoters)):
+                # the promoter ID string is not equal to the anchor ID string! (it's somewhere "in between")
+                if anchor in promoters[i]["id"]:
+                    anchor_promoter = i
+                    break
+
+            if not anchor_promoter:
+                logging.warning("No promoter region for {}, skipping anchor gene".format(anchor))
+                continue
+
+            motifs = get_motifs(anchor, anchor_promoter, promoters, options)
 
 
 def get_versions(options):
     """Get all utility versions"""
     # TODO meme, fimo, …
     return []
-
-
-def find_clusters(promoters, anchor_genes, options):
-    """Use core genes (anchor genes) as seeds to detect gene clusters"""
-
-    for anchor in anchor_genes:
-        logging.info("Detecting cluster around anchor gene {}".format(anchor))
-
-        anchor_promoter = None
-        for i in xrange(0, len(promoters)):
-            # the promoter ID string is not equal to the anchor ID string! (it's somewhere "in between")
-            if anchor in promoters[i]["id"]:
-                anchor_promoter = i
-                break
-
-        if not anchor_promoter:
-            logging.warning("No promoter region for {}, skipping".format(anchor))
-            continue
-
-        motifs = get_motifs(anchor, anchor_promoter, promoters, options)
-
-
-
 
 
 # TODO implement for cassis?
