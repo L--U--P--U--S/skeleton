@@ -109,7 +109,7 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
 
     genes = ignore_overlapping(utils.get_all_features_of_type(seq_record, "gene"))
     contig_length = len(seq_record.seq) # TODO is 1 seq_record == 1 contig always true?
-    promoters = [] # TODO use SeqRecords instead of simple dicts?
+    promoters = [] # TODO use SeqRecords instead of dicts?
     invalid = 0
 
     # TODO "format()" or "%s" or "s + s"?
@@ -425,6 +425,9 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
                 else:
                     logging.warning("Promoter %s is invalid (sequence without %s)", get_promoter_id(promoters[-1]), invalid_promoter_sequence) # especially SiTaR doesn't like such missings
 
+                # more details for debug logging
+                logging.debug("Invalid promoter {}\n start {}\n end {}\n length {}\n".format(promoters[-1]["id"], promoters[-1]["start"], promoters[-1]["end"], promoter_length))
+
                 promoters.pop() # remove last (invalid!) promoter
 
             else:
@@ -469,11 +472,11 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
         end_index = anchor_promoter + pm["plus"]
 
         if start_index < 0: # anchor promoter near beginning of record --> truncate
-            # logging.info("Promoter set +{}_-{} exceeds upstream record border".format(pm["plus"], pm["minus"]))
+            logging.debug("Promoter set +{}_-{} exceeds upstream record border".format(pm["plus"], pm["minus"]))
             start_index = 0
 
         if end_index > len(promoters) - 1: # anchor promoter near end of record --> truncate
-            # logging.info("Promoter set +{}_-{} exceeds downstream record border".format(pm["plus"], pm["minus"]))
+            logging.debug("Promoter set +{}_-{} exceeds downstream record border".format(pm["plus"], pm["minus"]))
             end_index = len(promoters) - 1
 
         # discard promoter sets, which reappear due to truncation
@@ -493,8 +496,8 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
                         # seq.description += " ANCHOR"
                         seq.id += "__ANCHOR"
                     SeqIO.write(seq, pm_handle, "fasta")
-        # else:
-            # logging.warning("Duplicate promoter set +{}_-{}".format(pm["plus"], pm["minus"]))
+        else:
+            logging.debug("Duplicate promoter set +{}_-{}".format(pm["plus"], pm["minus"]))
 
     # run MEME
     # FIXME for sure there is a more clever and elegant way to do this
@@ -511,7 +514,7 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
 
         # no motif found for given e-value cutoff :-(
         if "Stopped because motif E-value > " in reason:
-            # logging.info("Motif +{}_-{} exceeds e-value cutoff".format(motif["plus"], motif["minus"]))
+            logging.debug("Motif +{}_-{} exceeds e-value cutoff".format(motif["plus"], motif["minus"]))
             pass
 
         # motif(s) found :-)
@@ -527,13 +530,15 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
                 # motif["seqs"] = []
                 # for site in e.findall("motifs/motif/contributing_sites/contributing_site/site"):
                     # motif["seqs"].append("".join(map(lambda letter: letter.attrib["letter_id"], site.findall("letter_ref"))))
+                logging.debug("Motif +{}_-{} score (e-value) = {}".format(motif["plus"], motif["minus"], motif["score"]))
             else:
-                logging.info("Motif +{}_-{} does not occur in anchor gene promoter. Skipping motif".format(motif["plus"], motif["minus"]))
+                logging.debug("Motif +{}_-{} does not occur in anchor gene promoter. Skipping motif".format(motif["plus"], motif["minus"]))
 
         # unexpected reason, don't know why MEME stopped :-$
         else:
             logging.error("MEME stopped unexpectedly (reason: {})".format(reason))
 
+    # TODO only return motifs with score != ""
     return motifs
 
 
@@ -559,7 +564,7 @@ def detect(seq_record, options):
     promoters = get_promoters(seq_record, upstream_tss, downstream_tss, options)
 
     if len(promoters) < 3:
-        logging.error("Sequence {!r} yields less than 3 promoter regions. Skipping cluster detection".format(seq_record.name))
+        logging.warning("Sequence {!r} yields less than 3 promoter regions. Skipping cluster detection".format(seq_record.name))
     else:
         if len(promoters) < 40:
             logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
@@ -579,6 +584,12 @@ def detect(seq_record, options):
                 continue
 
             motifs = get_motifs(anchor, anchor_promoter, promoters, options)
+
+            # if ( !@predicted_motifs )
+            # {
+                # say "No motifs --> No cluster prediction for anchor gene \"$backbone_id\" (promoter #$backbone_promoter_nr).   :(";
+                # exit;
+            # }
 
 
 def get_versions(options):
