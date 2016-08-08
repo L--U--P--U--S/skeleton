@@ -515,7 +515,6 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
         # no motif found for given e-value cutoff :-(
         if "Stopped because motif E-value > " in reason:
             logging.debug("Motif +{}_-{} exceeds e-value cutoff".format(motif["plus"], motif["minus"]))
-            pass
 
         # motif(s) found :-)
         elif "Stopped because requested number of motifs (1) found" in reason:
@@ -538,8 +537,7 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
         else:
             logging.error("MEME stopped unexpectedly (reason: {})".format(reason))
 
-    # TODO only return motifs with score != ""
-    return motifs
+    return filter(lambda m: m["score"] != "", motifs)
 
 
 def detect(seq_record, options):
