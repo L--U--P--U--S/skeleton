@@ -17,7 +17,7 @@ import subprocess
 
 meme_dir = sys.argv[1]
 cpus = int(sys.argv[2])
-promoter_sequences = set()
+promoter_sequences = []
 
 def run_meme(fasta):
     exit_code = subprocess.call(["meme", fasta, "-oc", os.path.dirname(fasta) , "-dna", "-nostatus", "-mod", "anr", "-nmotifs", "1", "-minw", "6", "-maxw", "12", "-revcomp", "-evt", "1.0e+005"])
@@ -33,7 +33,7 @@ for plus_minus in os.listdir(meme_dir):
         if os.path.isfile(output_file) and os.path.getsize(output_file) > 0:
             pass
         else:
-            promoter_sequences.add(input_file)
+            promoter_sequences.append(input_file)
 
 if __name__ == "__main__": # THIS: if clause not "supported" inside the skeleton environment (__init__.py)
     p = Pool(cpus)
