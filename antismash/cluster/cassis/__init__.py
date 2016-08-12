@@ -518,17 +518,29 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
 
         # motif(s) found :-)
         elif "Stopped because requested number of motifs (1) found" in reason:
-            seqs = e.findall("training_set/sequence")
-            for i in xrange(0, len(seqs)):
-                if "__ANCHOR" in seqs[i].attrib["name"]:
-                    anchor_seq_id = seqs[i].attrib["id"]
+
+            # find anchor genes' sequence_id
+            training_set = e.findall("training_set/sequence") # all promoter sequences passed to MEME
+            for i in xrange(0, len(training_set)):
+                if "__ANCHOR" in training_set[i].attrib["name"]:
+                    anchor_seq_id = training_set[i].attrib["id"] # e.g. id=sequence_1
 
             # only accept motifs which occur in the anchor genes promoter
-            if anchor_seq_id:
-                motif["score"] = e.find("motifs/motif").attrib["e_value"]
-                # motif["seqs"] = []
-                # for site in e.findall("motifs/motif/contributing_sites/contributing_site/site"):
-                    # motif["seqs"].append("".join(map(lambda letter: letter.attrib["letter_id"], site.findall("letter_ref"))))
+            contributing_sites = e.findall("motifs/motif/contributing_sites/contributing_site") # sequences which contributed to the motif
+            if anchor_seq_id in map(lambda site: site.attrib["sequence_id"], contributing_sites):
+                # save motif score
+                motif["score"] = e.find("motifs/motif").attrib["e_value"] # one motif, didn't ask MEME for more
+
+                # save sequence sites which represent the motif
+                motif["seqs"] = []
+                for site in contributing_sites:
+                    motif["seqs"].append("".join(map(lambda letter: letter.attrib["letter_id"], site.findall("letter_ref"))))
+
+                # write sites to fasta file
+                with open(os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "binding_sites.fasta"), "w") as handle:
+                    handle.write(">{}__+{}_-{}\n".format(anchor, motif["plus"], motif["minus"]))
+                    handle.write("\n".join(motif["seqs"]))
+
                 logging.debug("Motif +{}_-{} score (e-value) = {}".format(motif["plus"], motif["minus"], motif["score"]))
             else:
                 logging.debug("Motif +{}_-{} does not occur in anchor gene promoter. Skipping motif".format(motif["plus"], motif["minus"]))
