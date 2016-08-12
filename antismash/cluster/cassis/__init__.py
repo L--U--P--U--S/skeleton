@@ -17,6 +17,9 @@ from Bio.SeqRecord import SeqRecord
 import os
 import subprocess
 from xml.etree import cElementTree as ElementTree
+import csv
+from pprint import pprint
+
 from antismash import (
     config,
     utils,
@@ -456,8 +459,8 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
     return promoters
 
 
-def get_motifs(anchor, anchor_promoter, promoters, options):
-    """Run MEME tool to detect motifs (putative transcription factor binding sites) in promoter sequences"""
+def predict_motifs(anchor, anchor_promoter, promoters, options):
+    """Run MEME tool to predict motifs (putative transcription factor binding sites) in promoter sequences"""
     # TODO options --> meme settings
     meme_dir = os.path.join(options.outputfoldername, "meme", anchor) # TODO are anchor gene names save to use for directories?
     motifs = []
@@ -552,6 +555,56 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
     return filter(lambda m: m["score"] != "", motifs)
 
 
+def search_motifs(anchor, motifs, promoters, seq_record, options):
+    """Run FIMO tool to find occurrences of previously predicted motifs (by MEME)"""
+    meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
+    fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor) # TODO are anchor gene names save to use for directories?
+    promoter_sequences = os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta")
+
+    if not os.path.exists(fimo_dir):
+        os.makedirs(fimo_dir)
+
+    # run FIMO
+    # FIXME for sure there is a more clever and elegant way to do this
+    exit_code = subprocess.call(["python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "fimo.py"), meme_dir, fimo_dir, promoter_sequences, str(options.cpus)])
+    if exit_code != 0:
+        logging.error("fimo.py discovered a problem (exit code {})".format(exit_code))
+
+    # analyse FIMO results
+    for motif in motifs:
+        motif["hits"] = dict()
+        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle: # TODO r or rb?
+            table = csv.reader(handle, delimiter = "\t")
+            for row in table:
+                if not row[0].startswith("#"): # skip comment lines
+                    seq_id = row[1]
+                    if seq_id in motif["hits"]:
+                        motif["hits"][seq_id] += 1
+                    else:
+                        motif["hits"][seq_id] = 1
+
+        percentage = float(len(motif["hits"])) / float(len(promoters)) * 100 # float!
+        logging.debug("Motif +{}_-{} occurs in {} promoters ({:.2f}% of all promoters)".format(motif["plus"], motif["minus"], len(motif["hits"]), percentage))
+
+        # write binding sites per promoter to file
+        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle: # TODO w or wb?
+            table = csv.writer(handle, delimiter = "\t", lineterminator = "\n")
+            table.writerow(["#", "promoter", "binding sites"]) # table head
+            for i in xrange(0, len(promoters)):
+                promoter = get_promoter_id(promoters[i])
+                if promoter in motif["hits"]:
+                    table.writerow([i+1, promoter, motif["hits"][promoter]])
+                else:
+                    table.writerow([i+1, promoter, 0])
+
+        if percentage > 14.0:
+            motif["hits"] = "too many"
+        elif percentage == 0.0:
+            motif["hits"] = "too few"
+
+    return motifs
+
+
 def detect(seq_record, options):
     """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
     logging.info("Detecting gene clusters using CASSIS method")
@@ -564,9 +617,9 @@ def detect(seq_record, options):
     # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
     anchor_genes = get_anchor_genes(seq_record)
 
-    ### testing ###
+    ### TESTING ###
     anchor_genes.append("AFUA_6G00240")
-    ### testing ###
+    ### TESTING ###
 
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     upstream_tss = 1000; # nucleotides upstream TSS
@@ -593,13 +646,18 @@ def detect(seq_record, options):
                 logging.warning("No promoter region for {}, skipping anchor gene".format(anchor))
                 continue
 
-            motifs = get_motifs(anchor, anchor_promoter, promoters, options)
+            # predict motifs with MEME around the anchor gene
+            motifs = predict_motifs(anchor, anchor_promoter, promoters, options)
 
-            # if ( !@predicted_motifs )
-            # {
-                # say "No motifs --> No cluster prediction for anchor gene \"$backbone_id\" (promoter #$backbone_promoter_nr).   :(";
-                # exit;
-            # }
+            if len(motifs) == 0:
+                logging.info("Could not predict any motifs. No cluster for {}".format(anchor))
+                continue
+
+            # search predicted binding sites with FIMO in all promoter sequences
+            # and count number of occurrences per promoter
+            motifs = search_motifs(anchor, motifs, promoters, seq_record, options)
+            # pprint(motifs)
+            # exit()
 
 
 def get_versions(options):
