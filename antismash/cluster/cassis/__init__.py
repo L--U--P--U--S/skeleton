@@ -527,14 +527,14 @@ def get_motifs(anchor, anchor_promoter, promoters, options):
 
             # only accept motifs which occur in the anchor genes promoter
             contributing_sites = e.findall("motifs/motif/contributing_sites/contributing_site") # sequences which contributed to the motif
-            if anchor_seq_id in map(lambda site: site.attrib["sequence_id"], contributing_sites):
+            if anchor_seq_id in map(lambda site: site.attrib["sequence_id"], contributing_sites): # could do it with filter(), but this seems to be less clear
                 # save motif score
                 motif["score"] = e.find("motifs/motif").attrib["e_value"] # one motif, didn't ask MEME for more
 
                 # save sequence sites which represent the motif
                 motif["seqs"] = []
                 for site in contributing_sites:
-                    motif["seqs"].append("".join(map(lambda letter: letter.attrib["letter_id"], site.findall("letter_ref"))))
+                    motif["seqs"].append("".join(map(lambda letter: letter.attrib["letter_id"], site.findall("site/letter_ref"))))
 
                 # write sites to fasta file
                 with open(os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "binding_sites.fasta"), "w") as handle:
