@@ -485,7 +485,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
         # discard promoter sets, which reappear due to truncation
         if (start_index, end_index) not in indices:
             indices.add((start_index, end_index))
-            motifs.append({"plus": pm["plus"], "minus": pm["minus"], "score": ""})
+            motifs.append({"plus": pm["plus"], "minus": pm["minus"], "score": None})
 
             pm_dir = os.path.join(meme_dir, "+{}_-{}".format(pm["plus"], pm["minus"]))
             if not os.path.exists(pm_dir):
@@ -552,7 +552,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
         else:
             logging.error("MEME stopped unexpectedly (reason: {})".format(reason))
 
-    return filter(lambda m: m["score"] != "", motifs)
+    return filter(lambda m: m["score"] is not None, motifs)
 
 
 def search_motifs(anchor, motifs, promoters, seq_record, options):
@@ -642,7 +642,7 @@ def detect(seq_record, options):
                     anchor_promoter = i
                     break
 
-            if not anchor_promoter:
+            if anchor_promoter is None:
                 logging.warning("No promoter region for {}, skipping anchor gene".format(anchor))
                 continue
 
