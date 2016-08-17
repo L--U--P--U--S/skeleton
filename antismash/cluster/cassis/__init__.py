@@ -555,7 +555,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
     return filter(lambda m: m["score"] is not None, motifs)
 
 
-def search_motifs(anchor, motifs, promoters, seq_record, options):
+def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options):
     """Run FIMO tool to find occurrences of previously predicted motifs (by MEME)"""
     meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
     fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor) # TODO are anchor gene names save to use for directories?
@@ -597,12 +597,17 @@ def search_motifs(anchor, motifs, promoters, seq_record, options):
                 else:
                     table.writerow([i+1, promoter, 0])
 
-        if percentage > 14.0:
-            motif["hits"] = "too many"
+        if percentage > 14.0: # TODO options
+            motif["hits"] = None
+            logging.debug("Too many hits for motif +{}_-{}".format(motif["plus"], motif["minus"]))
         elif percentage == 0.0:
-            motif["hits"] = "too few"
+            motif["hits"] = None
+            logging.debug("No hits for motif +{}_-{}".format(motif["plus"], motif["minus"]))
+        elif get_promoter_id(promoters[anchor_promoter]) not in motif["hits"]:
+            motif["hits"] = None
+            logging.debug("Could not find any hits for motif +{}_-{} in the promoter of the anchor gene".format(motif["plus"], motif["minus"]))
 
-    return motifs
+    return filter(lambda m: m["hits"] is not None, motifs)
 
 
 def detect(seq_record, options):
@@ -655,9 +660,11 @@ def detect(seq_record, options):
 
             # search predicted binding sites with FIMO in all promoter sequences
             # and count number of occurrences per promoter
-            motifs = search_motifs(anchor, motifs, promoters, seq_record, options)
-            # pprint(motifs)
-            # exit()
+            motifs = search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options)
+
+            if len(motifs) == 0:
+                logging.info("Could not find motif occurrences for {}, skipping anchor gene".format(anchor))
+                continue
 
 
 def get_versions(options):
