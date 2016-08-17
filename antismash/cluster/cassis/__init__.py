@@ -546,7 +546,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 
                 logging.debug("Motif +{}_-{} score (e-value) = {}".format(motif["plus"], motif["minus"], motif["score"]))
             else:
-                logging.debug("Motif +{}_-{} does not occur in anchor gene promoter. Skipping motif".format(motif["plus"], motif["minus"]))
+                logging.debug("Motif +{}_-{} does not occur in anchor gene promoter".format(motif["plus"], motif["minus"]))
 
         # unexpected reason, don't know why MEME stopped :-$
         else:
@@ -627,7 +627,7 @@ def detect(seq_record, options):
     promoters = get_promoters(seq_record, upstream_tss, downstream_tss, options)
 
     if len(promoters) < 3:
-        logging.warning("Sequence {!r} yields less than 3 promoter regions. Skipping cluster detection".format(seq_record.name))
+        logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
     else:
         if len(promoters) < 40:
             logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
@@ -650,7 +650,7 @@ def detect(seq_record, options):
             motifs = predict_motifs(anchor, anchor_promoter, promoters, options)
 
             if len(motifs) == 0:
-                logging.info("Could not predict any motifs. No cluster for {}".format(anchor))
+                logging.info("Could not predict motifs around {}, skipping anchor gene".format(anchor))
                 continue
 
             # search predicted binding sites with FIMO in all promoter sequences
