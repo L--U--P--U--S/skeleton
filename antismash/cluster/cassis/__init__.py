@@ -40,8 +40,8 @@ _required_binaries = [
 # plus --> include <plus> promoters downstream the anchor gene's promoter
 # minus --> include <minus> promoters upstream the anchor gene's promoter
 _plus_minus = []
-for plus in range(0, 16):
-    for minus in range(0, 16):
+for plus in range(16):
+    for minus in range(16):
         if plus + minus + 1 >= 4:
             _plus_minus.append({"plus": plus, "minus": minus})
 
@@ -525,7 +525,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 
             # find anchor genes' sequence_id
             training_set = e.findall("training_set/sequence") # all promoter sequences passed to MEME
-            for i in xrange(0, len(training_set)):
+            for i in xrange(len(training_set)):
                 if "__ANCHOR" in training_set[i].attrib["name"]:
                     anchor_seq_id = training_set[i].attrib["id"] # e.g. id=sequence_1
 
@@ -591,7 +591,7 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
         with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle: # TODO w or wb?
             table = csv.writer(handle, delimiter = "\t", lineterminator = "\n")
             table.writerow(["#", "promoter", "binding sites"]) # table head
-            for i in xrange(0, len(promoters)):
+            for i in xrange(len(promoters)):
                 promoter = get_promoter_id(promoters[i])
                 if promoter in motif["hits"]:
                     table.writerow([i+1, promoter, motif["hits"][promoter]])
@@ -642,7 +642,7 @@ def detect(seq_record, options):
             logging.info("Detecting cluster around anchor gene {}".format(anchor))
 
             anchor_promoter = None
-            for i in xrange(0, len(promoters)):
+            for i in xrange(len(promoters)):
                 # the promoter ID string is not equal to the anchor ID string! (it's somewhere "in between")
                 if anchor in promoters[i]["id"]:
                     anchor_promoter = i
