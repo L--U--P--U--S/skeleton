@@ -155,7 +155,7 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i])) # TODO logging.error --> die?
+                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i])) # TODO logging.error --> raise?
 
             elif genes[i].location.strand == -1:
                 if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #4
@@ -611,6 +611,176 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
     return filter(lambda m: m["hits"] is not None, motifs)
 
 
+def find_islands(anchor_promoter, motifs, promoters, options):
+    """Find islands of binding sites (previously found by FIMO) around anchor gene to define cluster borders"""
+    max_gap_length = 2 # TODO options
+    islands = []
+
+    for motif in motifs:
+        # create list with binding sites per promoter
+        bs_per_promoter = [0] * len(promoters) # first set number of binding sites to 0
+        for i in xrange(len(promoters)):
+            if get_promoter_id(promoters[i]) in motif["hits"]: # second set actual number of binding sites, if any
+                bs_per_promoter[i] = motif["hits"][get_promoter_id(promoters[i])]
+
+        # upstream
+        start = anchor_promoter # init upstream cluster border
+        i = anchor_promoter # init position of anchor gene's promoter
+        while i > 0:
+
+            # promoter with binding site
+            # … 1 …
+            if bs_per_promoter[i-1] >= 1:
+                start -= 1
+
+            # no binding site, gap with length 1
+            # … 1 0 1  …
+            elif (i - 2 >= 0
+                  and max_gap_length >= 1
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i-1] == 0
+                  and bs_per_promoter[i-2] >= 1):
+                start -= 2
+                i -= 1
+
+            # no binding site, gap with length 2
+            # … 1 0 0 1  …
+            elif (i - 3 >= 0
+                  and max_gap_length >= 2
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i-1] == 0
+                  and bs_per_promoter[i-2] == 0
+                  and bs_per_promoter[i-3] >= 1):
+                start -= 3
+                i     -= 2
+
+            # no binding site, gap with length 3
+            # … 1 0 0 0 1  …
+            elif (i - 4 >= 0
+                  and max_gap_length >= 3
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i-1] == 0
+                  and bs_per_promoter[i-2] == 0
+                  and bs_per_promoter[i-3] == 0
+                  and bs_per_promoter[i-4] >= 1):
+                start -= 4
+                i     -= 3
+
+            # no binding site, gap with length 4
+            # … 1 0 0 0 0 1  …
+            elif (i - 5 >= 0
+                  and max_gap_length >= 4
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i-1] == 0
+                  and bs_per_promoter[i-2] == 0
+                  and bs_per_promoter[i-3] == 0
+                  and bs_per_promoter[i-4] == 0
+                  and bs_per_promoter[i-5] >= 1):
+                start -= 5
+                i     -= 4
+
+            # no binding site, gap with length 5
+            # … 1 0 0 0 0 0 1  …
+            elif (i - 3 >= 6
+                  and max_gap_length >= 5
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i-1] == 0
+                  and bs_per_promoter[i-2] == 0
+                  and bs_per_promoter[i-3] == 0
+                  and bs_per_promoter[i-4] == 0
+                  and bs_per_promoter[i-2] == 5
+                  and bs_per_promoter[i-6] >= 1):
+                start -= 6
+                i     -= 5
+
+            # gap too long, stop upstream cluster extension
+            else:
+                break
+
+            i -= 1
+
+        # downstream
+        i = anchor_promoter # reset position of anchor gene's promoter
+        end = anchor_promoter # init downstream cluster border
+        while i < len(bs_per_promoter) - 1:
+
+            # promoter with binding site(s)
+            # … 1 …
+            if bs_per_promoter[i+1] > 0:
+                end += 1
+
+            # no binding site, gap with length 1
+            # … 1 0 1  …
+            elif (i + 2 < len(bs_per_promoter)
+                  and max_gap_length >= 1
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i+1] == 0
+                  and bs_per_promoter[i+2] >= 1):
+                end += 2
+                i += 1
+
+            # no binding site, gap with length 2
+            # … 1 0 0 1  …
+            elif (i + 3 < len(bs_per_promoter)
+                  and max_gap_length >= 2
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i+1] == 0
+                  and bs_per_promoter[i+2] == 0
+                  and bs_per_promoter[i+3] >= 1):
+                end += 3
+                i += 2
+
+            # no binding site, gap with length 3
+            # … 1 0 0 0 1  …
+            elif (i + 4 < len(bs_per_promoter)
+                  and max_gap_length >= 3
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i+1] == 0
+                  and bs_per_promoter[i+2] == 0
+                  and bs_per_promoter[i+3] == 0
+                  and bs_per_promoter[i+4] >= 1):
+                end += 4
+                i += 3
+
+            # no binding site, gap with length 4
+            # … 1 0 0 0 0 1  …
+            elif (i + 5 < len(bs_per_promoter)
+                  and max_gap_length >= 4
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i+1] == 0
+                  and bs_per_promoter[i+2] == 0
+                  and bs_per_promoter[i+3] == 0
+                  and bs_per_promoter[i+4] == 0
+                  and bs_per_promoter[i+5] >= 1):
+                end += 5
+                i += 4
+
+            # no binding site, gap with length 5
+            # … 1 0 0 0 0 0 1  …
+            elif (i + 6 < len(bs_per_promoter)
+                  and max_gap_length >= 5
+                  and bs_per_promoter[i] >= 1
+                  and bs_per_promoter[i+1] == 0
+                  and bs_per_promoter[i+2] == 0
+                  and bs_per_promoter[i+3] == 0
+                  and bs_per_promoter[i+4] == 0
+                  and bs_per_promoter[i+5] == 0
+                  and bs_per_promoter[i+6] >= 1):
+                end += 6
+                i += 5
+
+            # gap too long, stop downstream cluster extension
+            else:
+                break
+
+            i += 1
+
+        islands.append({"start": promoters[start], "end": promoters[end]}) # TODO save promoters or promoter ids or first/last gene?
+        logging.debug("Motif +{}_-{} island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(islands[-1]["start"]), get_promoter_id(islands[-1]["end"])))
+
+    return islands
+
+
 def detect(seq_record, options):
     """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
     logging.info("Detecting gene clusters using CASSIS method")
@@ -666,6 +836,8 @@ def detect(seq_record, options):
             if len(motifs) == 0:
                 logging.info("Could not find motif occurrences for {}, skipping anchor gene".format(anchor))
                 continue
+
+            clusters = find_islands(anchor_promoter, motifs, promoters, options)
 
 
 def get_versions(options):
