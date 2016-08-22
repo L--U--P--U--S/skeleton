@@ -11,14 +11,15 @@
 """Implementation of the CASSIS method for the motif-based prediction of SM gene clusters"""
 
 import logging
+import os
+import subprocess
+import csv
+from xml.etree import cElementTree as ElementTree
+# from pprint import pprint
+
 import Bio
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
-import os
-import subprocess
-from xml.etree import cElementTree as ElementTree
-import csv
-from pprint import pprint
 
 from antismash import (
     config,
