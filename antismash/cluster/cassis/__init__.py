@@ -15,7 +15,7 @@ import os
 import subprocess
 import csv
 from xml.etree import cElementTree as ElementTree
-# from pprint import pprint
+from pprint import pprint
 
 import Bio
 from Bio import SeqIO
@@ -113,7 +113,7 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
 
     genes = ignore_overlapping(utils.get_all_features_of_type(seq_record, "gene"))
     contig_length = len(seq_record.seq) # TODO is 1 seq_record == 1 contig always true?
-    promoters = [] # TODO use SeqRecords instead of dicts?
+    promoters = [] # TODO use SeqRecords instead of dicts or even create a class promoter (class cluster, class motif)?
     invalid = 0
 
     # TODO "format()" or "%s" or "s + s"?
@@ -536,9 +536,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
                 motif["score"] = e.find("motifs/motif").attrib["e_value"] # one motif, didn't ask MEME for more
 
                 # save sequence sites which represent the motif
-                motif["seqs"] = []
-                for site in contributing_sites:
-                    motif["seqs"].append("".join(map(lambda letter: letter.attrib["letter_id"], site.findall("site/letter_ref"))))
+                motif["seqs"] = ["".join(map(lambda letter: letter.attrib["letter_id"], site.findall("site/letter_ref"))) for site in contributing_sites]
 
                 # write sites to fasta file
                 with open(os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "binding_sites.fasta"), "w") as handle:
@@ -573,7 +571,7 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
 
     # analyse FIMO results
     for motif in motifs:
-        motif["hits"] = dict()
+        motif["hits"] = {}
         with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle: # TODO r or rb?
             table = csv.reader(handle, delimiter = "\t")
             for row in table:
@@ -786,9 +784,6 @@ def detect(seq_record, options):
     logging.info("Detecting gene clusters using CASSIS method")
 
     # TODO options? cassis settings/parameters?
-
-    # print dir(seq_record)
-    # ['__add__', '__bool__', '__class__', '__contains__', '__delattr__', '__dict__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__', '__iter__', '__le___', '__len__', '__lt__', '__module__', '__ne__', '__new__', '__nonzero__', '__radd__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_per_letter_annotations', '_seq', '_set_per_letter_annotations', '_set_seq', 'annotations', 'dbxrefs', 'description', 'features', 'format', 'id', 'letter_annotations', 'lower', 'name', 'reverse_complement', 'seq', 'upper']
 
     # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
     anchor_genes = get_anchor_genes(seq_record)
