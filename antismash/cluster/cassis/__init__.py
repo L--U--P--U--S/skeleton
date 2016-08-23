@@ -773,8 +773,8 @@ def find_islands(anchor_promoter, motifs, promoters, options):
 
             i += 1
 
-        islands.append({"start": promoters[start], "end": promoters[end]}) # TODO save promoters or promoter ids or first/last gene?
-        logging.debug("Motif +{}_-{} island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(islands[-1]["start"]), get_promoter_id(islands[-1]["end"])))
+        logging.debug("Motif +{}_-{} island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
+        islands.append({"start": promoters[start], "end": promoters[end], "motif": motif, "length": end - start + 1}) # TODO save promoters or promoter ids or first/last gene?
 
     return islands
 
