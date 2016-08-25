@@ -783,6 +783,36 @@ def find_islands(anchor_promoter, motifs, promoters, options):
     return islands
 
 
+def get_most_abundant_borders(islands):
+    """sort upstream (start) and downstream (end) borders of islands by abundance and return the must abundant"""
+    # count border abundance
+    # start/end are treated independently!
+    starts = {}
+    ends = {}
+    for i in islands:
+        if i["start"]["id"][0] in starts:
+            starts[i["start"]["id"][0]] += 1
+        else:
+            starts[i["start"]["id"][0]] = 1
+
+        if i["end"]["id"][-1] in ends:
+            ends[i["end"]["id"][-1]] += 1
+        else:
+            ends[i["end"]["id"][-1]] = 1
+
+    # compute sum of start and end abundance, remove duplicates, sort descending
+    for abundance in sorted(set([s + e for s in starts.values() for e in ends.values()]), reverse=True):
+        # sort by value (=abundance) of start, descending
+        for start in sorted(starts, key=starts.get, reverse=True):
+            # sort by value (=abundance) of end, descending
+            for end in sorted(ends, key=ends.get, reverse=True):
+                if starts[start] + ends[end] == abundance:
+                    logging.debug("Abundance {}: [{} ({}), {} ({})]".format(abundance, start, starts[start], end, ends[end]))
+
+
+    # exit()
+
+
 def detect(seq_record, options):
     """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
     logging.info("Detecting gene clusters using CASSIS method")
@@ -836,7 +866,10 @@ def detect(seq_record, options):
                 logging.info("Could not find motif occurrences for {}, skipping anchor gene".format(anchor))
                 continue
 
-            clusters = find_islands(anchor_promoter, motifs, promoters, options)
+            islands = find_islands(anchor_promoter, motifs, promoters, options)
+            logging.debug("{} cluster predictions for {}".format(len(islands), anchor))
+
+            cluster = get_most_abundant_borders(islands)
 
 
 def get_versions(options):
