@@ -518,7 +518,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 
         # no motif found for given e-value cutoff :-(
         if "Stopped because motif E-value > " in reason:
-            logging.debug("Motif +{}_-{} exceeds e-value cutoff".format(motif["plus"], motif["minus"]))
+            logging.debug("Motif +{:02d}/-{:02d}: e-value exceeds cutoff".format(motif["plus"], motif["minus"]))
 
         # motif(s) found :-)
         elif "Stopped because requested number of motifs (1) found" in reason:
@@ -543,9 +543,9 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
                     handle.write(">{}__+{}_-{}\n".format(anchor, motif["plus"], motif["minus"]))
                     handle.write("\n".join(motif["seqs"]))
 
-                logging.debug("Motif +{}_-{} score (e-value) = {}".format(motif["plus"], motif["minus"], motif["score"]))
+                logging.debug("Motif +{:02d}/-{:02d}: e-value = {}".format(motif["plus"], motif["minus"], motif["score"]))
             else:
-                logging.debug("Motif +{}_-{} does not occur in anchor gene promoter".format(motif["plus"], motif["minus"]))
+                logging.debug("Motif +{:02d}/-{:02d}: does not occur in anchor gene promoter".format(motif["plus"], motif["minus"]))
 
         # unexpected reason, don't know why MEME stopped :-$
         else:
@@ -582,9 +582,6 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
                     else:
                         motif["hits"][seq_id] = 1
 
-        percentage = float(len(motif["hits"])) / float(len(promoters)) * 100 # float!
-        logging.debug("Motif +{}_-{} occurs in {} promoters ({:.2f}% of all promoters)".format(motif["plus"], motif["minus"], len(motif["hits"]), percentage))
-
         # write binding sites per promoter to file
         with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle: # TODO w or wb?
             table = csv.writer(handle, delimiter = "\t", lineterminator = "\n")
@@ -596,15 +593,22 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
                 else:
                     table.writerow([i+1, promoter, 0])
 
-        if percentage > 14.0: # TODO options
+        percentage = float(len(motif["hits"])) / float(len(promoters)) * 100 # float!
+        if percentage == 0.0:
+            # too low
+            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters (no hits)".format(motif["plus"], motif["minus"], len(motif["hits"])))
             motif["hits"] = None
-            logging.debug("Too many hits for motif +{}_-{}".format(motif["plus"], motif["minus"]))
-        elif percentage == 0.0:
+        elif percentage > 14.0: # TODO options
+            # too high
+            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters (too many)".format(motif["plus"], motif["minus"], len(motif["hits"]), percentage))
             motif["hits"] = None
-            logging.debug("No hits for motif +{}_-{}".format(motif["plus"], motif["minus"]))
-        elif get_promoter_id(promoters[anchor_promoter]) not in motif["hits"]:
+        elif get_promoter_id(promoters[anchor_promoter]) not in motif["hits"]: # not in achor promoter
+            # no site in anchor promoter
+            logging.debug("Motif +{:02d}/-{:02d}: not hits in the promoter of the anchor gene".format(motif["plus"], motif["minus"]))
             motif["hits"] = None
-            logging.debug("Could not find any hits for motif +{}_-{} in the promoter of the anchor gene".format(motif["plus"], motif["minus"]))
+        else:
+            # everything ok
+            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters".format(motif["plus"], motif["minus"], len(motif["hits"]), percentage))
 
     return filter(lambda m: m["hits"] is not None, motifs)
 
@@ -773,7 +777,7 @@ def find_islands(anchor_promoter, motifs, promoters, options):
 
             i += 1
 
-        logging.debug("Motif +{}_-{} island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
+        logging.debug("Motif +{:02d}/-{:02d}: island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
         islands.append({"start": promoters[start], "end": promoters[end], "motif": motif, "length": end - start + 1}) # TODO save promoters or promoter ids or first/last gene?
 
     return islands
