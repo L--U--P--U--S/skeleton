@@ -778,39 +778,56 @@ def find_islands(anchor_promoter, motifs, promoters, options):
             i += 1
 
         logging.debug("Motif +{:02d}/-{:02d}: island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
-        islands.append({"start": promoters[start], "end": promoters[end], "motif": motif, "length": end - start + 1}) # TODO save promoters or promoter ids or first/last gene?
+        islands.append({"start": promoters[start], "end": promoters[end], "motif": motif}) # TODO save promoters or promoter ids or first/last gene?
 
     return islands
 
 
-def get_most_abundant_borders(islands):
-    """sort upstream (start) and downstream (end) borders of islands by abundance and return the must abundant"""
+def sort_by_abundance(islands):
+    """sort upstream (start) and downstream (end) borders of islands by abundance"""
     # count border abundance
     # start/end are treated independently!
     starts = {}
     ends = {}
     for i in islands:
         if i["start"]["id"][0] in starts:
-            starts[i["start"]["id"][0]] += 1
+            starts[i["start"]["id"][0]]["abund"] += 1
         else:
-            starts[i["start"]["id"][0]] = 1
+            starts[i["start"]["id"][0]] = {"abund": 1}
 
         if i["end"]["id"][-1] in ends:
-            ends[i["end"]["id"][-1]] += 1
+            ends[i["end"]["id"][-1]]["abund"] += 1
         else:
-            ends[i["end"]["id"][-1]] = 1
+            ends[i["end"]["id"][-1]] = {"abund": 1}
+
+        # also keep track of motif score
+        # --> sort by score if same abundance occurs more than once
+        starts[i["start"]["id"][0]]["mscore"] = i["motif"]["score"]
+        ends[i["end"]["id"][-1]]["mscore"] = i["motif"]["score"]
 
     # compute sum of start and end abundance, remove duplicates, sort descending
-    for abundance in sorted(set([s + e for s in starts.values() for e in ends.values()]), reverse=True):
-        # sort by value (=abundance) of start, descending
-        for start in sorted(starts, key=starts.get, reverse=True):
-            # sort by value (=abundance) of end, descending
-            for end in sorted(ends, key=ends.get, reverse=True):
-                if starts[start] + ends[end] == abundance:
-                    logging.debug("Abundance {}: [{} ({}), {} ({})]".format(abundance, start, starts[start], end, ends[end]))
+    abundances_sum_sorted = sorted(set([s["abund"] + e["abund"] for s in starts.values() for e in ends.values()]), reverse=True)
+    # compute sum of start and end motif score, remove duplicates, sort ascending
+    scores_sum_sorted = sorted(set([float(s["mscore"]) + float(e["mscore"]) for s in starts.values() for e in ends.values()]))
+    # sort by value (=abundance) of start, descending
+    starts_sorted = sorted(starts, key=starts.get, reverse=True)
+    # sort by value (=abundance) of end, descending
+    ends_sorted = sorted(ends, key=ends.get, reverse=True)
 
+    clusters = []
+    for abundance in abundances_sum_sorted:
+        # list from highest (best) to lowest (worst) abundance
+        for score in scores_sum_sorted:
+            # list from lowest (best) to highest (worst) motif score/e-value
+            for start in starts_sorted:
+                for end in ends_sorted:
+                    if starts[start]["abund"] + ends[end]["abund"] == abundance and float(starts[start]["mscore"]) + float(ends[end]["mscore"]) == score:
+                        logging.debug("Abundance {}, score {:.1e}: [{}, {}, {} -- {}, {}, {}]".format(abundance, score, start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
+                        clusters.append( {"start": {"gene": start, "abundance": starts[start]["abund"], "score": starts[start]["mscore"]}, "end": {"gene": end, "abundance": ends[end]["abund"], "score": ends[end]["mscore"]}})
+                        # list[ dict{left border: dict, right border: dict} ]
 
-    # exit()
+    return clusters
+
 
 
 def detect(seq_record, options):
@@ -866,11 +883,24 @@ def detect(seq_record, options):
                 logging.info("Could not find motif occurrences for {}, skipping anchor gene".format(anchor))
                 continue
 
+            # find islands of binding sites around anchor gene
             islands = find_islands(anchor_promoter, motifs, promoters, options)
             logging.debug("{} cluster predictions for {}".format(len(islands), anchor))
 
-            cluster = get_most_abundant_borders(islands)
+            # return cluster predictions sorted by border abundance
+            # most abundant --> "best" prediction --> index 0
+            cluster_predictions = sort_by_abundance(islands)
+            logging.info("Best prediction: {} -- {}".format(cluster_predictions[0]["start"]["gene"], cluster_predictions[0]["end"]["gene"]))
 
+            # TODO warn if gene overlapping with anther gene (ignored) would have been part of the cluster?
+
+            # TODO check for "strange" predictions --> "[Warning] …"
+            # cluster is spanning multiple contigs!
+            # not on multiple contigs, but exactly at the contig border
+            # not on multiple contigs, but at least near the contig border
+            # prediction (too) short
+
+            # exit()
 
 def get_versions(options):
     """Get all utility versions"""
@@ -897,7 +927,7 @@ def get_versions(options):
 #
 #        cluster.qualifiers['note'].append(rule_string)
 
-# TODO implement for cassis?
+# TODO implement for cassis? (Kai?)
 #def _update_sec_met_entry(feature, results, clustertype, nseqdict):
 #    '''Update the sec_met entry for a feature'''
 #    result = "; ".join(["%s (E-value: %s, bitscore: %s, seeds: %s)" % (
