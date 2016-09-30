@@ -78,7 +78,7 @@ def get_promoter_id(promoter):
 
 def ignore_overlapping(genes):
     """Ignore genes with overlapping locations (skip the second gene of an overlapping couple)"""
-    ignored = 0
+    ignored = []
 
     overlap = True
     while overlap: # check again until we didn't find any overlap in the entire (remaining) gene list
@@ -90,8 +90,8 @@ def ignore_overlapping(genes):
             if (genes[i-1].location.end >= genes[i].location.start) or (genes[i-1].location.start <= genes[i].location.start and genes[i-1].location.end >= genes[i].location.end):
                 # A <----->                                             A <---------->
                 # B    <----->                                          B   <----->
-                logging.warning("Ignoring {} (overlapping with {})".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # # TODO info or warning?
-                ignored += 1
+                logging.warning("Ignoring {} (overlapping with {})".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # TODO info or warning?
+                ignored.append(genes[i])
                 overlap = True
             else:
                 non_overlapping.append(genes[i])
@@ -99,20 +99,19 @@ def ignore_overlapping(genes):
         genes = non_overlapping
 
     if ignored:
-        logging.info("Ignoring {} genes due to overlapping locations".format(ignored))
+        logging.info("Ignoring {} genes due to overlapping locations".format(len(ignored)))
 
-    return genes
+    return (genes, ignored)
 
 
-def get_promoters(seq_record, upstream_tss, downstream_tss, options):
+def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
     """Compute promoter sequences for each gene in the sequence record"""
     logging.info("Computing promoter sequences")
 
     min_promoter_length = 6
     max_promoter_length = (upstream_tss + downstream_tss) * 2 + 1
 
-    genes = ignore_overlapping(utils.get_all_features_of_type(seq_record, "gene"))
-    contig_length = len(seq_record.seq) # TODO is 1 seq_record == 1 contig always true?
+    record_seq_length = len(seq_record.seq)
     promoters = [] # TODO use SeqRecords instead of dicts or even create a class promoter (class cluster, class motif)?
     invalid = 0
 
@@ -158,29 +157,29 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i])) # TODO logging.error --> raise?
 
             elif genes[i].location.strand == -1:
-                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #4
+                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length: #4
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > contig_length: #5
+                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #5
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
-                        "end": contig_length
+                        "end": record_seq_length
                     })
-                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #6
+                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length: #6
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i+1].location.start >= genes[i].location.end - upstream_tss and genes[i].location.end + upstream_tss > contig_length: #8
+                elif genes[i+1].location.start >= genes[i].location.end - upstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #8
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
-                        "end": contig_length
+                        "end": record_seq_length
                     })
                 else:
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
@@ -276,29 +275,29 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
             elif genes[i].location.strand == -1:
-                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length: #4
+                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length: #4
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > contig_length: #5
+                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #5
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
-                        "end": contig_length
+                        "end": record_seq_length
                     })
-                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= contig_length : #6
+                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length : #6
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.end + upstream_tss > contig_length: #8
+                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #8
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
-                        "end": contig_length
+                        "end": record_seq_length
                     })
                 else:
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
@@ -396,8 +395,8 @@ def get_promoters(seq_record, upstream_tss, downstream_tss, options):
         # negative start position or stop position "beyond" record --> might happen in very small records
         if promoters[-1]["start"] < 1:
             promoters[-1]["start"] = 1
-        if promoters[-1]["end"] > contig_length:
-            promoters[-1]["end"] = contig_length
+        if promoters[-1]["end"] > record_seq_length:
+            promoters[-1]["end"] = record_seq_length
 
         # write promoter positions and sequences to file
         if not skip:
@@ -846,7 +845,8 @@ def detect(seq_record, options):
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     upstream_tss = 1000; # nucleotides upstream TSS
     downstream_tss = 50; # nucleotides downstream TSS
-    promoters = get_promoters(seq_record, upstream_tss, downstream_tss, options)
+    genes, ignored_genes = ignore_overlapping(utils.get_all_features_of_type(seq_record, "gene"))
+    promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
 
     if len(promoters) < 3:
         logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
@@ -889,18 +889,29 @@ def detect(seq_record, options):
 
             # return cluster predictions sorted by border abundance
             # most abundant --> "best" prediction --> index 0
+            # so far, only use best prediction (this may change in later versions of this plugin)
             cluster_predictions = sort_by_abundance(islands)
             logging.info("Best prediction: {} -- {}".format(cluster_predictions[0]["start"]["gene"], cluster_predictions[0]["end"]["gene"]))
 
-            # TODO warn if gene overlapping with anther gene (ignored) would have been part of the cluster?
+            # warn if cluster prediction right at or next to record (~ contig) border
+            all_genes = map(lambda g: utils.get_gene_id(g), utils.get_all_features_of_type(seq_record, "gene"))
+            start_index = all_genes.index(cluster_predictions[0]["start"]["gene"])
+            end_index = all_genes.index(cluster_predictions[0]["end"]["gene"])
+            if start_index < 10:
+                logging.warning("Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
+            if end_index > len(all_genes) - 10:
+                logging.warning("Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
 
-            # TODO check for "strange" predictions --> "[Warning] …"
-            # cluster is spanning multiple contigs!
-            # not on multiple contigs, but exactly at the contig border
-            # not on multiple contigs, but at least near the contig border
-            # prediction (too) short
+            # warn if cluster prediction too short (includes less than 3 genes)
+            if end_index - start_index + 1 < 3:
+                logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
 
-            # exit()
+            # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
+            for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
+                if ignored_gene in all_genes[start_index : end_index + 1]:
+                    logging.warning("Ignored gene {} could have affected the prediction".format(ignored_gene))
+                    break
+
 
 def get_versions(options):
     """Get all utility versions"""
