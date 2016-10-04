@@ -619,9 +619,9 @@ def find_islands(anchor_promoter, motifs, promoters, options):
 
     for motif in motifs:
         # create list with binding sites per promoter
-        bs_per_promoter = [0] * len(promoters) # first set number of binding sites to 0
+        bs_per_promoter = [0] * len(promoters) # first: set number of binding sites to 0
         for i in xrange(len(promoters)):
-            if get_promoter_id(promoters[i]) in motif["hits"]: # second set actual number of binding sites, if any
+            if get_promoter_id(promoters[i]) in motif["hits"]: # second: set actual number of binding sites, if any
                 bs_per_promoter[i] = motif["hits"][get_promoter_id(promoters[i])]
 
         # upstream
@@ -821,9 +821,12 @@ def sort_by_abundance(islands):
             for start in starts_sorted:
                 for end in ends_sorted:
                     if starts[start]["abund"] + ends[end]["abund"] == abundance and float(starts[start]["mscore"]) + float(ends[end]["mscore"]) == score:
-                        logging.debug("Abundance {}, score {:.1e}: [{}, {}, {} -- {}, {}, {}]".format(abundance, score, start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
-                        clusters.append( {"start": {"gene": start, "abundance": starts[start]["abund"], "score": starts[start]["mscore"]}, "end": {"gene": end, "abundance": ends[end]["abund"], "score": ends[end]["mscore"]}})
                         # list[ dict{left border: dict, right border: dict} ]
+                        clusters.append({
+                            "start": {"gene": start, "abundance": starts[start]["abund"], "score": starts[start]["mscore"]},
+                            "end": {"gene": end, "abundance": ends[end]["abund"], "score": ends[end]["mscore"]}
+                        })
+                        logging.debug("Abundance {}, score {:.1e}: [{}, {}, {} -- {}, {}, {}]".format(abundance, score, start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
 
     return clusters
 
@@ -859,7 +862,7 @@ def detect(seq_record, options):
 
             anchor_promoter = None
             for i in xrange(len(promoters)):
-                # the promoter ID string is not equal to the anchor ID string! (it's somewhere "in between")
+                # the promoter ID string is not equal to the anchor ID string!
                 if anchor in promoters[i]["id"]:
                     anchor_promoter = i
                     break
@@ -886,7 +889,7 @@ def detect(seq_record, options):
             # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
             # Alternative to MEME and FIMO. Part of the original CASSIS implementation.
             # No motif prediction (no MEME). Motif search with SiTaR (instead if FIMO).
-            # Have to provide a file in (multi) FASTA format with binding site sequences of at least one transcription factor.
+            # Have to provide a file in FASTA format with binding site sequences of at least one transcription factor.
             # Will result in binding sites per promoter (like FIMO) --> find islands
             #
             # implement: YES? NO?
@@ -898,25 +901,49 @@ def detect(seq_record, options):
             # return cluster predictions sorted by border abundance
             # most abundant --> "best" prediction --> index 0
             # so far, only use best prediction (this may change in later versions of this plugin)
-            cluster_predictions = sort_by_abundance(islands)
-            logging.info("Best prediction: {} -- {}".format(cluster_predictions[0]["start"]["gene"], cluster_predictions[0]["end"]["gene"]))
+            # cluster_predictions = sort_by_abundance(islands)
+            cluster_prediction = sort_by_abundance(islands)[0]
+
+            # find indices of first and last GENE of the cluster prediction in all genes
+            all_genes = map(lambda g: utils.get_gene_id(g), utils.get_all_features_of_type(seq_record, "gene"))
+            start_index_genes = None
+            end_index_genes = None
+            for i in xrange(len(all_genes)):
+                if not start_index_genes and cluster_prediction["start"]["gene"] is all_genes[i]:
+                    start_index_genes = i
+                if not end_index_genes and cluster_prediction["end"]["gene"] is all_genes[i]:
+                    end_index_genes = i
+                if start_index_genes and end_index_genes:
+                    break
+
+            # find indices of first and last PROMOTER of the cluster prediction in all promoters
+            start_index_promotors = None
+            end_index_promoters = None
+            for i in xrange(len(promoters)):
+                if not start_index_promotors and cluster_prediction["start"]["gene"] in promoters[i]["id"]:
+                    start_index_promotors = i
+                if not end_index_promoters and cluster_prediction["end"]["gene"] in promoters[i]["id"]:
+                    end_index_promoters = i
+                if start_index_promotors and end_index_promoters:
+                    break
+
+            cluster_length_genes = end_index_genes - start_index_genes + 1
+            cluster_length_promoters = end_index_promoters - start_index_promotors + 1
+            logging.info("Best prediction: {} -- {}, {} genes, {} promoters".format(cluster_prediction["start"]["gene"], cluster_prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
 
             # warn if cluster prediction right at or next to record (~ contig) border
-            all_genes = map(lambda g: utils.get_gene_id(g), utils.get_all_features_of_type(seq_record, "gene"))
-            start_index = all_genes.index(cluster_predictions[0]["start"]["gene"])
-            end_index = all_genes.index(cluster_predictions[0]["end"]["gene"])
-            if start_index < 10:
+            if start_index_genes < 10:
                 logging.warning("Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
-            if end_index > len(all_genes) - 10:
+            if end_index_genes > len(all_genes) - 10:
                 logging.warning("Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
 
             # warn if cluster prediction too short (includes less than 3 genes)
-            if end_index - start_index + 1 < 3:
+            if cluster_length_genes < 3:
                 logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
 
             # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
             for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
-                if ignored_gene in all_genes[start_index : end_index + 1]:
+                if ignored_gene in all_genes[start_index_genes : end_index_genes + 1]:
                     logging.warning("Ignored gene {} could have affected the prediction".format(ignored_gene))
                     break
 
