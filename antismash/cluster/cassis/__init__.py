@@ -777,7 +777,7 @@ def find_islands(anchor_promoter, motifs, promoters, options):
             i += 1
 
         logging.debug("Motif +{:02d}/-{:02d}: island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
-        islands.append({"start": promoters[start], "end": promoters[end], "motif": motif}) # TODO save promoters or promoter ids or first/last gene?
+        islands.append({"start": promoters[start], "end": promoters[end], "motif": motif})
 
     return islands
 
@@ -882,6 +882,14 @@ def detect(seq_record, options):
             if len(motifs) == 0:
                 logging.info("Could not find motif occurrences for {}, skipping anchor gene".format(anchor))
                 continue
+
+            # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
+            # Alternative to MEME and FIMO. Part of the original CASSIS implementation.
+            # No motif prediction (no MEME). Motif search with SiTaR (instead if FIMO).
+            # Have to provide a file in (multi) FASTA format with binding site sequences of at least one transcription factor.
+            # Will result in binding sites per promoter (like FIMO) --> find islands
+            #
+            # implement: YES? NO?
 
             # find islands of binding sites around anchor gene
             islands = find_islands(anchor_promoter, motifs, promoters, options)
