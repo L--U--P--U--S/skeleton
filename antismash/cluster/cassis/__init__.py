@@ -15,7 +15,6 @@ import os
 import subprocess
 import csv
 from xml.etree import cElementTree as ElementTree
-from pprint import pprint
 
 import Bio
 from Bio import SeqIO
@@ -840,10 +839,6 @@ def detect(seq_record, options):
 
     # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
     anchor_genes = get_anchor_genes(seq_record)
-
-    ### TESTING ###
-    anchor_genes.append("AFUA_6G00240")
-    ### TESTING ###
 
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     upstream_tss = 1000; # nucleotides upstream TSS
