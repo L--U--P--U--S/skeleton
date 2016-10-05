@@ -839,12 +839,23 @@ def detect(seq_record, options):
 
     # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
     anchor_genes = get_anchor_genes(seq_record)
+    if not anchor_genes:
+        logging.info("Record has no anchor genes")
+        return
+
+    # filter all genes in record for neighbouring genes with overlapping annotations
+    genes = utils.get_all_features_of_type(seq_record, "gene")
+    if not genes:
+        logging.info("Record has no features of type 'gene'")
+        return
+    genes, ignored_genes = ignore_overlapping(genes)
 
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     upstream_tss = 1000; # nucleotides upstream TSS
     downstream_tss = 50; # nucleotides downstream TSS
-    genes, ignored_genes = ignore_overlapping(utils.get_all_features_of_type(seq_record, "gene"))
     promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
+    if not promoters:
+        return
 
     if len(promoters) < 3:
         logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
@@ -852,6 +863,7 @@ def detect(seq_record, options):
         if len(promoters) < 40:
             logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
 
+        logging.info("Record has {} anchor genes".format(len(anchor_genes)))
         for anchor in anchor_genes:
             logging.info("Detecting cluster around anchor gene {}".format(anchor))
 
