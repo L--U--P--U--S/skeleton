@@ -184,7 +184,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
         # first gene of the record AND NOT special case #9
-        elif ( i == 0 and i != len(genes) ) and not ( genes[i].location.strand == -1 and genes[i+1].location.strand == 1 and genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss ):
+        elif ( i == 0 ) and not ( genes[i].location.strand == -1 and genes[i+1].location.strand == 1 and genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss ):
 
             if genes[i].location.strand == 1:
                 if genes[i].location.start - upstream_tss >= 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #1
@@ -243,7 +243,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
         # last gene of record
-        elif i == len(genes) and not skip:
+        elif i == len(genes) - 1 and not skip:
 
             if genes[i].location.strand == 1:
                 if genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #1
