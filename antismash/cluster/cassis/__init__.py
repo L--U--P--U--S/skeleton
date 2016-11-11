@@ -25,6 +25,11 @@ from antismash import (
     utils,
 )
 
+from antismash.utils.errors import (
+    InvalidLocationError,
+    DuplicatePromoterError,
+)
+
 
 name = "cassis"
 short_description = name + ": Detect secondary metabolite gene cluster (motif based)"
@@ -158,7 +163,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i]))) # TODO logging.error --> raise?
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
             elif genes[i].location.strand == -1:
                 #4
@@ -194,7 +200,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": record_seq_length
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
         # first gene of the record AND NOT special case #9
         elif (i == 0 and not
@@ -236,7 +243,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
             elif genes[i].location.strand == -1:
                 #4
@@ -272,7 +280,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i+1].location.start - 1
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
         # last gene of record
         elif i == len(genes) - 1 and not skip:
@@ -311,7 +320,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
             elif genes[i].location.strand == -1:
                 #4
@@ -347,7 +357,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": record_seq_length
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
         # special-case 9
         elif (genes[i].location.strand == -1 and
@@ -387,7 +398,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     "end": genes[i+1].end
                 })
             else:
-                logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                raise InvalidLocationError
 
             skip = 1
 
@@ -428,7 +440,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
             elif genes[i].location.strand == -1:
                 #4
@@ -464,7 +477,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i+1].location.start - 1
                     })
                 else:
-                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    logging.error("BUG: Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
+                    raise InvalidLocationError
 
         # negative start position or stop position "beyond" record --> might happen in very small records
         if promoters[-1]["start"] < 1:
@@ -529,7 +543,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
         if len(promoters) >= 2 and get_promoter_id(promoters[-1]) == get_promoter_id(promoters[-2]):
             logging.error("Promoter {!r} occurs at least twice. This may be caused by overlapping gene annotations".format(
                 get_promoter_id(promoters[-1])))
-            # TODO die? raise exception?
+            raise DuplicatePromoterError
 
     if invalid:
         logging.info("Ignoring {} promoters due to invalid promoter sequences".format(invalid))
@@ -952,7 +966,11 @@ def detect(seq_record, options):
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     upstream_tss = 1000; # nucleotides upstream TSS
     downstream_tss = 50; # nucleotides downstream TSS
-    promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
+    promoters = [];
+    try:
+        promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
+    except (InvalidLocationError, DuplicatePromoterError):
+        return
     if not promoters:
         return
 

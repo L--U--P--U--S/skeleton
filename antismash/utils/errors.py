@@ -24,3 +24,8 @@ class InvalidIdError(AntiSmashError):
 class InvalidLocationError(AntiSmashError):
     '''Thrown when running into invalid gene locations during runtime'''
     pass
+
+
+class DuplicatePromoterError(AntiSmashError):
+    '''Thrown when running into valid but duplicate promoter sequences during runtime'''
+    pass
