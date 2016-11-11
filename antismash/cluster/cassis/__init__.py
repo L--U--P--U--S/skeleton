@@ -484,15 +484,14 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                 invalid_promoter_sequence = "length"
 
             # check if a, c, g and t occur at least once in the promoter sequence
-            elif "A" not in promoter_sequence:
+            elif "A" not in promoter_sequence.upper():
                 invalid_promoter_sequence = "A"
-            elif "C" not in promoter_sequence:
+            elif "C" not in promoter_sequence.upper():
                 invalid_promoter_sequence = "C"
-            elif "G" not in promoter_sequence:
+            elif "G" not in promoter_sequence.upper():
                 invalid_promoter_sequence = "G"
-            elif "T" not in promoter_sequence:
+            elif "T" not in promoter_sequence.upper():
                 invalid_promoter_sequence = "T"
-                # TODO always capital letters?
 
             if invalid_promoter_sequence:
                 invalid += 1
