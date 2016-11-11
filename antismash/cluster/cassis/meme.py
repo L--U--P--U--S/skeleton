@@ -20,7 +20,19 @@ cpus = int(sys.argv[2])
 promoter_sequences = []
 
 def run_meme(fasta):
-    exit_code = subprocess.call(["meme", fasta, "-oc", os.path.dirname(fasta) , "-dna", "-nostatus", "-mod", "anr", "-nmotifs", "1", "-minw", "6", "-maxw", "12", "-revcomp", "-evt", "1.0e+005"])
+    exit_code = subprocess.call([
+        "meme",
+        fasta,
+        "-oc", os.path.dirname(fasta) ,
+        "-dna",
+        "-nostatus",
+        "-mod",
+        "anr",
+        "-nmotifs", "1",
+        "-minw", "6",
+        "-maxw", "12",
+        "-revcomp",
+        "-evt", "1.0e+005"])
     return exit_code
 
 for plus_minus in os.listdir(meme_dir):

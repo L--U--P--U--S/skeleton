@@ -86,9 +86,12 @@ def ignore_overlapping(genes):
 
         for i in xrange(1, len(genes)):
             # TODO seq_record/genes is sorted by start coordinates? if no: have to consider more cases!
-            if (genes[i-1].location.end >= genes[i].location.start) or (genes[i-1].location.start <= genes[i].location.start and genes[i-1].location.end >= genes[i].location.end):
-                # A <----->                                             A <---------->
-                # B    <----->                                          B   <----->
+            if (genes[i-1].location.end >= genes[i].location.start or
+                    # A <----->
+                    # B    <----->
+                    (genes[i-1].location.start <= genes[i].location.start and genes[i-1].location.end >= genes[i].location.end)):
+                    # A <---------->
+                    # B   <----->
                 logging.warning("Ignoring {} (overlapping with {})".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # TODO info or warning?
                 ignored.append(genes[i])
                 overlap = True
@@ -128,25 +131,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
         elif len(genes) == 1: # only one gene within record
 
             if genes[i].location.strand == 1:
-                if genes[i].location.start - upstream_tss >= 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                #1 (for explanation of these numbers see file promoterregions.png)
+                if (genes[i].location.start - upstream_tss >= 0 and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                #2
+                elif (genes[i].location.start - upstream_tss < 0
+                        and genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": 1, # TODO 0? --> "Note that the start and end location numbering follow Python's scheme, thus a GenBank entry of 123..150 (one based counting) becomes a location of [122:150] (zero based counting)."
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i].location.start - upstream_tss >= 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                #3
+                elif (genes[i].location.start - upstream_tss >= 0 and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.end
                     })
-                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                #7
+                elif (genes[i].location.start - upstream_tss < 0 and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": 1,
@@ -156,25 +167,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i])) # TODO logging.error --> raise?
 
             elif genes[i].location.strand == -1:
-                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length: #4
+                #4
+                if (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i].location.end + upstream_tss <= record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #5
+                #5
+                elif (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i].location.end + upstream_tss > record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": record_seq_length
                     })
-                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length: #6
+                #6
+                elif (genes[i].location.start >= genes[i].location.end - downstream_tss and
+                        genes[i].location.end + upstream_tss <= record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i+1].location.start >= genes[i].location.end - upstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #8
+                #8
+                elif (genes[i+1].location.start >= genes[i].location.end - upstream_tss and
+                        genes[i].location.end + upstream_tss > record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
@@ -184,28 +203,39 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
         # first gene of the record AND NOT special case #9
-        elif ( i == 0 ) and not ( genes[i].location.strand == -1 and genes[i+1].location.strand == 1 and genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss ):
+        elif (i == 0 and not
+                (genes[i].location.strand == -1 and
+                    genes[i+1].location.strand == 1 and
+                    genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss)):
 
             if genes[i].location.strand == 1:
-                if genes[i].location.start - upstream_tss >= 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                #1
+                if (genes[i].location.start - upstream_tss >= 0 and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                #2
+                elif (genes[i].location.start - upstream_tss < 0 and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": 1,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i].location.start - upstream_tss >= 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                #3
+                elif (genes[i].location.start - upstream_tss >= 0 and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.end
                     })
-                elif genes[i].location.start - upstream_tss < 0 and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                #7
+                elif (genes[i].location.start - upstream_tss < 0 and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": 1,
@@ -215,25 +245,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
             elif genes[i].location.strand == -1:
-                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #4
+                #4
+                if (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i+1].location.start > genes[i].location.end + upstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start <= genes[i].location.end + upstream_tss: #5
+                #5
+                elif (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i+1].location.start <= genes[i].location.end + upstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i+1].location.start - 1
                     })
-                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #6
+                #6
+                elif (genes[i].location.start >= genes[i].location.end - downstream_tss and
+                        genes[i+1].location.start > genes[i].location.end + upstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.start >= genes[i].location.end - downstream_tss: #8
+                #8
+                elif (genes[i+1].location.start <= genes[i].location.end + upstream_tss and
+                        genes[i].location.start >= genes[i].location.end - downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
@@ -246,25 +284,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
         elif i == len(genes) - 1 and not skip:
 
             if genes[i].location.strand == 1:
-                if genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                #1
+                if (genes[i-1].location.end < genes[i].location.start - upstream_tss and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                #2
+                elif (genes[i-1].location.end >= genes[i].location.start - upstream_tss and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i-1].location.end + 1,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                #3
+                elif (genes[i-1].location.end < genes[i].location.start - upstream_tss and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.end
                     })
-                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                #7
+                elif (genes[i-1].location.end >= genes[i].location.start - upstream_tss and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i-1].location.end + 1,
@@ -274,25 +320,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
             elif genes[i].location.strand == -1:
-                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length: #4
+                #4
+                if (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i].location.end + upstream_tss <= record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #5
+                #5
+                elif (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i].location.end + upstream_tss > record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": record_seq_length
                     })
-                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i].location.end + upstream_tss <= record_seq_length : #6
+                #6
+                elif (genes[i].location.start >= genes[i].location.end - downstream_tss and
+                        genes[i].location.end + upstream_tss <= record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.end + upstream_tss > record_seq_length: #8
+                #8
+                elif (genes[i+1].location.start <= genes[i].location.end + upstream_tss and
+                        genes[i].location.end + upstream_tss > record_seq_length):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
@@ -302,26 +356,37 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
         # special-case 9
-        elif genes[i].location.strand == -1 and genes[i+1].location.strand == 1 and genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss:
-            if genes[i].location.end > genes[i].location.start + downstream_tss and genes[i].location.start < genes[i].location.end - downstream_tss: #9 (1+4)
+        elif (genes[i].location.strand == -1 and
+                genes[i+1].location.strand == 1 and
+                genes[i].location.end + upstream_tss >= genes[i+1].location.start - upstream_tss):
+
+            #9 (1+4)
+            if (genes[i].location.end > genes[i].location.start + downstream_tss and
+                    genes[i].location.start < genes[i].location.end - downstream_tss):
                 promoters.append({
                     "id": [utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])],
                     "start": genes[i].location.end - downstream_tss,
                     "end": genes[i+1].location.start + downstream_tss
                 })
-            elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start + downstream_tss >= genes[i+1].end: #9 (3+4)
+            #9 (3+4)
+            elif (genes[i].location.start < genes[i].location.end - downstream_tss and
+                    genes[i+1].location.start + downstream_tss >= genes[i+1].end):
                 promoters.append({
                     "id": [utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])],
                     "start": genes[i].location.end - downstream_tss,
                     "end": genes[i+1].end
                 })
-            elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].end > genes[i+1].location.start + downstream_tss: #9 (1+6)
+            #9 (1+6)
+            elif (genes[i].location.start >= genes[i].location.end - downstream_tss and
+                    genes[i+1].end > genes[i+1].location.start + downstream_tss):
                 promoters.append({
                     "id": [utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])],
                     "start": genes[i].location.start,
                     "end": genes[i+1].location.start + downstream_tss
                 })
-            elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].location.start + downstream_tss >= genes[i+1].end: #9 (3+6)
+            #9 (3+6)
+            elif (genes[i].location.start >= genes[i].location.end - downstream_tss and
+                    genes[i+1].location.start + downstream_tss >= genes[i+1].end):
                 promoters.append({
                     "id": [utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i+1])],
                     "start": genes[i].location.start,
@@ -336,25 +401,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
         elif not skip:
 
             if genes[i].location.strand == 1:
-                if genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #1
+                #1
+                if (genes[i-1].location.end < genes[i].location.start - upstream_tss and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.end > genes[i].location.start + downstream_tss: #2
+                #2
+                elif (genes[i-1].location.end >= genes[i].location.start - upstream_tss and
+                        genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i-1].location.end + 1,
                         "end": genes[i].location.start + downstream_tss
                     })
-                elif genes[i-1].location.end < genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #3
+                #3
+                elif (genes[i-1].location.end < genes[i].location.start - upstream_tss and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.end
                     })
-                elif genes[i-1].location.end >= genes[i].location.start - upstream_tss and genes[i].location.start + downstream_tss >= genes[i].location.end: #7
+                #7
+                elif (genes[i-1].location.end >= genes[i].location.start - upstream_tss and
+                        genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i-1].location.end + 1,
@@ -364,25 +437,33 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
 
             elif genes[i].location.strand == -1:
-                if genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #4
+                #4
+                if (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i+1].location.start > genes[i].location.end + upstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i].location.start < genes[i].location.end - downstream_tss and genes[i+1].location.start <= genes[i].location.end + upstream_tss: #5
+                #5
+                elif (genes[i].location.start < genes[i].location.end - downstream_tss and
+                        genes[i+1].location.start <= genes[i].location.end + upstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.end - downstream_tss,
                         "end": genes[i+1].location.start - 1
                     })
-                elif genes[i].location.start >= genes[i].location.end - downstream_tss and genes[i+1].location.start > genes[i].location.end + upstream_tss: #6
+                #6
+                elif (genes[i].location.start >= genes[i].location.end - downstream_tss and
+                        genes[i+1].location.start > genes[i].location.end + upstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
                         "end": genes[i].location.end + upstream_tss
                     })
-                elif genes[i+1].location.start <= genes[i].location.end + upstream_tss and genes[i].location.start >= genes[i].location.end - downstream_tss: #8
+                #8
+                elif (genes[i+1].location.start <= genes[i].location.end + upstream_tss and
+                        genes[i].location.start >= genes[i].location.end - downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start,
@@ -423,12 +504,16 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                 invalid += 1
 
                 if invalid_promoter_sequence == "length":
-                    logging.warning("Promoter %s is invalid (length is %s)", get_promoter_id(promoters[-1]), promoter_length)
+                    logging.warning("Promoter %s is invalid (length is %s)",
+                        get_promoter_id(promoters[-1]), promoter_length)
                 else:
-                    logging.warning("Promoter %s is invalid (sequence without %s)", get_promoter_id(promoters[-1]), invalid_promoter_sequence) # especially SiTaR doesn't like such missings
+                    # especially SiTaR doesn't like such missings
+                    logging.warning("Promoter %s is invalid (sequence without %s)",
+                        get_promoter_id(promoters[-1]), invalid_promoter_sequence)
 
                 # more details for debug logging
-                logging.debug("Invalid promoter {}\n start {}\n end {}\n length {}\n".format(promoters[-1]["id"], promoters[-1]["start"], promoters[-1]["end"], promoter_length))
+                logging.debug("Invalid promoter {}\n start {}\n end {}\n length {}\n".format(
+                    promoters[-1]["id"], promoters[-1]["start"], promoters[-1]["end"], promoter_length))
 
                 promoters.pop() # remove last (invalid!) promoter
 
@@ -436,7 +521,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                 promoters[-1]["seq"] = promoter_sequence
 
                 # write promoter positions to file
-                pos_handle.write("\t".join(map(str, [len(promoters), get_promoter_id(promoters[-1]), promoters[-1]["start"], promoters[-1]["end"], promoter_length])) + "\n")
+                pos_handle.write("\t".join(map(str,
+                    [len(promoters), get_promoter_id(promoters[-1]), promoters[-1]["start"], promoters[-1]["end"], promoter_length])) + "\n")
 
                 # write promoter sequences to file
                 SeqIO.write(
@@ -448,7 +534,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
 
         # check if promoter IDs are unique
         if len(promoters) >= 2 and get_promoter_id(promoters[-1]) == get_promoter_id(promoters[-2]):
-            logging.error("Promoter %s occurs at least twice. This may be caused by overlapping gene annotations", get_promoter_id(promoters[-1]))
+            logging.error("Promoter %s occurs at least twice. This may be caused by overlapping gene annotations",
+                get_promoter_id(promoters[-1]))
             # TODO die? raise exception?
 
     if invalid:
@@ -493,7 +580,9 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
             # write promoter sequences to fasta file, in respective "plus-minus" subdir
             with open(os.path.join(pm_dir, "promoters.fasta"), "w") as pm_handle:
                 for i in xrange(start_index, end_index + 1):
-                    seq = SeqRecord(promoters[i]["seq"], id = get_promoter_id(promoters[i]), description = "length={}bp".format(len(promoters[i]["seq"])))
+                    seq = SeqRecord(promoters[i]["seq"],
+                        id = get_promoter_id(promoters[i]),
+                        description = "length={}bp".format(len(promoters[i]["seq"])))
                     if i == anchor_promoter: # mark anchor gene (must be part of id, otherwise MEME woun't recognize it)
                         # seq.description += " ANCHOR"
                         seq.id += "__ANCHOR"
@@ -503,7 +592,10 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 
     # run MEME
     # FIXME for sure there is a more clever and elegant way to do this
-    exit_code = subprocess.call(["python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "meme.py"), meme_dir, str(options.cpus)])
+    exit_code = subprocess.call([
+        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "meme.py"),
+        meme_dir,
+        str(options.cpus)])
     if exit_code != 0:
         logging.error("meme.py discovered a problem (exit code {})".format(exit_code))
 
@@ -529,21 +621,24 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 
             # only accept motifs which occur in the anchor genes promoter
             contributing_sites = e.findall("motifs/motif/contributing_sites/contributing_site") # sequences which contributed to the motif
-            if anchor_seq_id in map(lambda site: site.attrib["sequence_id"], contributing_sites): # could do it with filter(), but this seems to be less clear
+            if anchor_seq_id in map(lambda site: site.attrib["sequence_id"], contributing_sites):
                 # save motif score
                 motif["score"] = e.find("motifs/motif").attrib["e_value"] # one motif, didn't ask MEME for more
 
                 # save sequence sites which represent the motif
-                motif["seqs"] = ["".join(map(lambda letter: letter.attrib["letter_id"], site.findall("site/letter_ref"))) for site in contributing_sites]
+                motif["seqs"] = ["".join(map(lambda letter: letter.attrib["letter_id"], site.findall("site/letter_ref")))
+                    for site in contributing_sites]
 
                 # write sites to fasta file
                 with open(os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "binding_sites.fasta"), "w") as handle:
                     handle.write(">{}__+{}_-{}\n".format(anchor, motif["plus"], motif["minus"]))
                     handle.write("\n".join(motif["seqs"]))
 
-                logging.debug("Motif +{:02d}/-{:02d}: e-value = {}".format(motif["plus"], motif["minus"], motif["score"]))
+                logging.debug("Motif +{:02d}/-{:02d}: e-value = {}".format(
+                    motif["plus"], motif["minus"], motif["score"]))
             else:
-                logging.debug("Motif +{:02d}/-{:02d}: does not occur in anchor gene promoter".format(motif["plus"], motif["minus"]))
+                logging.debug("Motif +{:02d}/-{:02d}: does not occur in anchor gene promoter".format(
+                    motif["plus"], motif["minus"]))
 
         # unexpected reason, don't know why MEME stopped :-$
         else:
@@ -563,7 +658,12 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
 
     # run FIMO
     # FIXME for sure there is a more clever and elegant way to do this
-    exit_code = subprocess.call(["python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "fimo.py"), meme_dir, fimo_dir, promoter_sequences, str(options.cpus)])
+    exit_code = subprocess.call([
+        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "fimo.py"),
+        meme_dir,
+        fimo_dir,
+        promoter_sequences,
+        str(options.cpus)])
     if exit_code != 0:
         logging.error("fimo.py discovered a problem (exit code {})".format(exit_code))
 
@@ -594,19 +694,23 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
         percentage = float(len(motif["hits"])) / float(len(promoters)) * 100 # float!
         if percentage == 0.0:
             # too low
-            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters (no hits)".format(motif["plus"], motif["minus"], len(motif["hits"])))
+            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters (no hits)".format(
+                motif["plus"], motif["minus"], len(motif["hits"])))
             motif["hits"] = None
         elif percentage > 14.0: # TODO options
             # too high
-            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters (too many)".format(motif["plus"], motif["minus"], len(motif["hits"]), percentage))
+            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters (too many)".format(
+                motif["plus"], motif["minus"], len(motif["hits"]), percentage))
             motif["hits"] = None
         elif get_promoter_id(promoters[anchor_promoter]) not in motif["hits"]: # not in achor promoter
             # no site in anchor promoter
-            logging.debug("Motif +{:02d}/-{:02d}: not hits in the promoter of the anchor gene".format(motif["plus"], motif["minus"]))
+            logging.debug("Motif +{:02d}/-{:02d}: not hits in the promoter of the anchor gene".format(
+                motif["plus"], motif["minus"]))
             motif["hits"] = None
         else:
             # everything ok
-            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters".format(motif["plus"], motif["minus"], len(motif["hits"]), percentage))
+            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters".format(
+                motif["plus"], motif["minus"], len(motif["hits"]), percentage))
 
     return filter(lambda m: m["hits"] is not None, motifs)
 
@@ -775,7 +879,8 @@ def find_islands(anchor_promoter, motifs, promoters, options):
 
             i += 1
 
-        logging.debug("Motif +{:02d}/-{:02d}: island [{}, {}]".format(motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
+        logging.debug("Motif +{:02d}/-{:02d}: island [{}, {}]".format(
+            motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
         islands.append({"start": promoters[start], "end": promoters[end], "motif": motif})
 
     return islands
@@ -819,16 +924,17 @@ def sort_by_abundance(islands):
             # list from lowest (best) to highest (worst) motif score/e-value
             for start in starts_sorted:
                 for end in ends_sorted:
-                    if starts[start]["abund"] + ends[end]["abund"] == abundance and float(starts[start]["mscore"]) + float(ends[end]["mscore"]) == score:
+                    if (starts[start]["abund"] + ends[end]["abund"] == abundance and
+                            float(starts[start]["mscore"]) + float(ends[end]["mscore"]) == score):
                         # list[ dict{left border: dict, right border: dict} ]
                         clusters.append({
                             "start": {"gene": start, "abundance": starts[start]["abund"], "score": starts[start]["mscore"]},
                             "end": {"gene": end, "abundance": ends[end]["abund"], "score": ends[end]["mscore"]}
                         })
-                        logging.debug("Abundance {}, score {:.1e}: [{}, {}, {} -- {}, {}, {}]".format(abundance, score, start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
+                        logging.debug("Abundance {}, score {:.1e}: [{}, {}, {} -- {}, {}, {}]".format(
+                            abundance, score, start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
 
     return clusters
-
 
 
 def detect(seq_record, options):
@@ -861,7 +967,8 @@ def detect(seq_record, options):
         logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
     else:
         if len(promoters) < 40:
-            logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(seq_record.name, len(promoters)))
+            logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(
+                seq_record.name, len(promoters)))
 
         logging.info("Record has {} anchor genes".format(len(anchor_genes)))
         for anchor in anchor_genes:
@@ -936,7 +1043,8 @@ def detect(seq_record, options):
 
             cluster_length_genes = end_index_genes - start_index_genes + 1
             cluster_length_promoters = end_index_promoters - start_index_promotors + 1
-            logging.info("Best prediction: {} -- {}, {} genes, {} promoters".format(cluster_prediction["start"]["gene"], cluster_prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
+            logging.info("Best prediction: {} -- {}, {} genes, {} promoters".format(
+                cluster_prediction["start"]["gene"], cluster_prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
 
             # warn if cluster prediction right at or next to record (~ contig) border
             if start_index_genes < 10:
