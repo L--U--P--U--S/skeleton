@@ -58,6 +58,11 @@ def check_prereqs(options):
     return failure_messages
 
 
+def get_versions(options):
+    """Get all utility versions"""
+    return map(lambda x: " ".join(x), _required_binaries)
+
+
 def get_anchor_genes(seq_record):
     """Return all genes which are putative cluster anchor genes"""
     anchor_genes = []
@@ -559,10 +564,8 @@ def get_anchor_promoter(anchor, promoters):
     return None
 
 
-def predict_motifs(anchor, anchor_promoter, promoters, options):
-    """Run MEME tool to predict motifs (putative transcription factor binding sites) in promoter sequences"""
-    # TODO options --> meme settings
-    meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
+def prepare_motifs(meme_dir, anchor_promoter, promoters):
+    """Prepare sets of promoter sequences and motif subdirectories"""
     motifs = []
 
     if not os.path.exists(meme_dir):
@@ -604,8 +607,13 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
         else:
             logging.debug("Duplicate promoter set +{}_-{}".format(pm["plus"], pm["minus"]))
 
-    # run MEME
+    return motifs
+
+
+def run_meme(meme_dir, options):
+    """Run MEME (in parallel) on each motif subdirectory"""
     # FIXME for sure there is a more clever and elegant way to do this
+    # TODO options --> meme settings
     exit_code = subprocess.call([
         "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "meme.py"),
         meme_dir,
@@ -613,7 +621,9 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
     if exit_code != 0:
         logging.error("meme.py discovered a problem (exit code {})".format(exit_code))
 
-    # analyse MEME results
+
+def filter_meme_results(meme_dir, motifs, anchor):
+    """Analyse and filter MEME results"""
     for motif in motifs:
         xml_file = os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "meme.xml")
         e = ElementTree.parse(xml_file).getroot()
@@ -661,10 +671,8 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
     return filter(lambda m: m["score"] is not None, motifs)
 
 
-def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options):
-    """Run FIMO tool to find occurrences of previously predicted motifs (by MEME)"""
-    meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
-    fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor)
+def run_fimo(meme_dir, fimo_dir, seq_record, options):
+    """Run MEME (in parallel) on each motif subdirectory"""
     promoter_sequences = os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta")
 
     if not os.path.exists(fimo_dir):
@@ -681,7 +689,9 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
     if exit_code != 0:
         logging.error("fimo.py discovered a problem (exit code {})".format(exit_code))
 
-    # analyse FIMO results
+
+def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
+    """Analyse and filter MEME results"""
     for motif in motifs:
         motif["hits"] = {}
         with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle:
@@ -893,8 +903,8 @@ def find_islands(anchor_promoter, motifs, promoters, options):
 
             i += 1
 
-        logging.debug("Motif +{:02d}/-{:02d}: island [{}, {}]".format(
-            motif["plus"], motif["minus"], get_promoter_id(promoters[start]), get_promoter_id(promoters[end])))
+        logging.debug("Island {} -- {} (motif +{:02d}/-{:02d})".format(
+            get_promoter_id(promoters[start]), get_promoter_id(promoters[end]), motif["plus"], motif["minus"]))
         islands.append({"start": promoters[start], "end": promoters[end], "motif": motif})
 
     return islands
@@ -945,16 +955,20 @@ def sort_by_abundance(islands):
                             "start": {"gene": start, "abundance": starts[start]["abund"], "score": starts[start]["mscore"]},
                             "end": {"gene": end, "abundance": ends[end]["abund"], "score": ends[end]["mscore"]}
                         })
-                        logging.debug("Abundance {}, score {:.1e}: [{}, {}, {} -- {}, {}, {}]".format(
-                            abundance, score, start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
+                        logging.debug("[Gene {}; abundance {}; score {}] -- [Gene {}; abundance {}; score {}]".format(
+                            start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
+                        logging.debug("Total abundance {}, total score {:.1e}".format(
+                            abundance, score))
 
     return clusters
 
 
 def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes):
     """Get some more infos about each cluster prediction and check if it seems to be sane"""
-    for cp in xrange(len(cluster_predictions)):
-        prediction = cluster_predictions[cp]
+    checked_predictions = []
+    for i in xrange(len(cluster_predictions)):
+        prediction = cluster_predictions[i]
+        prediction["priority"] = i + 1
         sane = True
 
         # find indices of first and last GENE of the cluster prediction in all genes
@@ -970,35 +984,40 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
                 break
 
         # find indices of first and last PROMOTER of the cluster prediction in all promoters
-        start_index_promotors = None
+        start_index_promoters = None
         end_index_promoters = None
         for i in xrange(len(promoters)):
-            if not start_index_promotors and prediction["start"]["gene"] in promoters[i]["id"]:
-                start_index_promotors = i
+            if not start_index_promoters and prediction["start"]["gene"] in promoters[i]["id"]:
+                start_index_promoters = i
             if not end_index_promoters and prediction["end"]["gene"] in promoters[i]["id"]:
                 end_index_promoters = i
-            if start_index_promotors and end_index_promoters:
+            if start_index_promoters and end_index_promoters:
                 break
 
-        cluster_length_genes = end_index_genes - start_index_genes + 1
-        cluster_length_promoters = end_index_promoters - start_index_promotors + 1
-        if cp == 0:
-            logging.info("Best prediction: {!r} -- {!r}, {} genes, {} promoters".format(
-                prediction["start"]["gene"], prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
+        prediction["start"]["promoter"] = get_promoter_id(promoters[start_index_promoters])
+        prediction["end"]["promoter"] = get_promoter_id(promoters[end_index_promoters])
+        prediction["length_genes"] = end_index_genes - start_index_genes + 1
+        prediction["length_promoters"] = end_index_promoters - start_index_promoters + 1
+
+        if prediction["priority"] == 1:
+            logging.info("Best prediction (most abundant): {!r} -- {!r}".format(
+                prediction["start"]["gene"], prediction["end"]["gene"]))
         else:
-            logging.info("Alternative prediction ({}): {!r} -- {!r}, {} genes, {} promoters".format(
-                cp, prediction["start"]["gene"], prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
+            logging.info("Alternative prediction ({}): {!r} -- {!r}".format(
+                prediction["priority"], prediction["start"]["gene"], prediction["end"]["gene"]))
 
         # warn if cluster prediction right at or next to record (~ contig) border
         if start_index_genes < 10:
-            logging.warning("Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
+            logging.warning(
+                "Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
             sane = False
         if end_index_genes > len(all_genes) - 10:
-            logging.warning("Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
+            logging.warning(
+                "Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
             sane = False
 
         # warn if cluster prediction too short (includes less than 3 genes)
-        if cluster_length_genes < 3:
+        if prediction["length_genes"] < 3:
             logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
             sane = False
 
@@ -1009,8 +1028,12 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
                 # sane = False
                 break
 
+        checked_predictions.append(prediction)
+
         if sane:
             break
+
+    return checked_predictions
 
 
 def detect(seq_record, options):
@@ -1051,24 +1074,29 @@ def detect(seq_record, options):
         logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
         logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
 
-    for anchor in anchor_genes:
-        logging.info("Detecting cluster around anchor gene {!r}".format(anchor))
+    for i in xrange(len(anchor_genes)):
+        anchor = anchor_genes[i]
+        logging.info("Detecting cluster around anchor gene {!r} ({} of {})".format(anchor, i + 1, len(anchor_genes)))
 
         anchor_promoter = get_anchor_promoter(anchor, promoters)
         if anchor_promoter is None:
             logging.warning("No promoter region for {!r}, skipping this anchor gene".format(anchor))
             continue
 
-        # predict motifs with MEME around the anchor gene
-        motifs = predict_motifs(anchor, anchor_promoter, promoters, options)
+        # predict motifs with MEME ("de novo")
+        meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
+        motifs = prepare_motifs(meme_dir, anchor_promoter, promoters)
+        run_meme(meme_dir, options)
+        motifs = filter_meme_results(meme_dir, motifs, anchor)
 
         if len(motifs) == 0:
             logging.info("Could not predict motifs around {!r}, skipping this anchor gene".format(anchor))
             continue
 
-        # search predicted binding sites with FIMO in all promoter sequences
-        # and count number of occurrences per promoter
-        motifs = search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options)
+        # search motifs with FIMO ("scanning")
+        fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor)
+        run_fimo(meme_dir, fimo_dir, seq_record, options)
+        motifs = filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options)
 
         if len(motifs) == 0:
             logging.info("Could not find motif occurrences for {!r}, skipping this anchor gene".format(anchor))
@@ -1087,10 +1115,10 @@ def detect(seq_record, options):
         logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
 
         # return cluster predictions sorted by border abundance
-        # most abundant --> "best" prediction --> index 0
+        # (most abundant --> "best" prediction)
         cluster_predictions = sort_by_abundance(islands)
-        check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
 
+        cluster_predictions = check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
 
 def get_versions(options):
     """Get all utility versions"""
