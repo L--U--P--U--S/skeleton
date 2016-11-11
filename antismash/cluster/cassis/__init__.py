@@ -138,7 +138,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         and genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
-                        "start": 1, # TODO 0? --> "Note that the start and end location numbering follow Python's scheme, thus a GenBank entry of 123..150 (one based counting) becomes a location of [122:150] (zero based counting)."
+                        "start": 0,
                         "end": genes[i].location.start + downstream_tss
                     })
                 #3
@@ -154,7 +154,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
-                        "start": 1,
+                        "start": 0,
                         "end": genes[i].location.end
                     })
                 else:
@@ -216,7 +216,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         genes[i].location.end > genes[i].location.start + downstream_tss):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
-                        "start": 1,
+                        "start": 0,
                         "end": genes[i].location.start + downstream_tss
                     })
                 #3
@@ -232,7 +232,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         genes[i].location.start + downstream_tss >= genes[i].location.end):
                     promoters.append({
                         "id": [utils.get_gene_id(genes[i])],
-                        "start": 1,
+                        "start": 0,
                         "end": genes[i].location.end
                     })
                 else:
