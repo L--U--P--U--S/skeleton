@@ -554,7 +554,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
 def predict_motifs(anchor, anchor_promoter, promoters, options):
     """Run MEME tool to predict motifs (putative transcription factor binding sites) in promoter sequences"""
     # TODO options --> meme settings
-    meme_dir = os.path.join(options.outputfoldername, "meme", anchor) # TODO are anchor gene names save to use for directories?
+    meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
     motifs = []
 
     if not os.path.exists(meme_dir):
@@ -656,7 +656,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options):
     """Run FIMO tool to find occurrences of previously predicted motifs (by MEME)"""
     meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
-    fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor) # TODO are anchor gene names save to use for directories?
+    fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor)
     promoter_sequences = os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta")
 
     if not os.path.exists(fimo_dir):
