@@ -141,3 +141,16 @@ def sort_features(seq_record):
             raise InvalidLocationError(feature)
     #Sort features by location
     seq_record.features.sort(cmp=cmp_feature_location)
+
+
+# shamelessly stolen from the "real" antismash
+def features_overlap(a, b):
+    "Check if two features have overlapping locations"
+    astart = min([a.location.start, a.location.end])
+    aend = max([a.location.start, a.location.end])
+    bstart = min([b.location.start, b.location.end])
+    bend = max([b.location.start, b.location.end])
+    return (astart >= bstart and astart <= bend) or \
+           (aend >= bstart and aend <= bend) or \
+           (bstart >= astart and bstart <= aend) or \
+           (bend >= astart and bend <= aend)

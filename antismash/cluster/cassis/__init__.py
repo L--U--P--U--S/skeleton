@@ -85,15 +85,9 @@ def ignore_overlapping(genes):
         non_overlapping = [genes[0]]
 
         for i in xrange(1, len(genes)):
-            # TODO seq_record/genes is sorted by start coordinates? if no: have to consider more cases!
-            if (genes[i-1].location.end >= genes[i].location.start or
-                    # A <----->
-                    # B    <----->
-                    (genes[i-1].location.start <= genes[i].location.start and genes[i-1].location.end >= genes[i].location.end)):
-                    # A <---------->
-                    # B   <----->
-                logging.warning("Ignoring {!r} (overlapping with {!r})".format(
-                    utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # TODO info or warning?
+            if utils.features_overlap(genes[i-1], genes[i]):
+                logging.info("Ignoring {!r} (overlapping with {!r})".format(
+                    utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1])))
                 ignored.append(genes[i])
                 overlap = True
             else:
