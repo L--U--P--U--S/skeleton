@@ -109,7 +109,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
     max_promoter_length = (upstream_tss + downstream_tss) * 2 + 1
 
     record_seq_length = len(seq_record.seq)
-    promoters = [] # TODO use SeqRecords instead of dicts or even create a class promoter (class cluster, class motif)?
+    promoters = []
     invalid = 0
 
     pos_handle = open(os.path.join(options.outputfoldername, seq_record.name + "_promoter_positions.csv"), "w")
@@ -663,7 +663,7 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
     # analyse FIMO results
     for motif in motifs:
         motif["hits"] = {}
-        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle: # TODO r or rb?
+        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle:
             table = csv.reader(handle, delimiter = "\t")
             for row in table:
                 if not row[0].startswith("#"): # skip comment lines
@@ -674,7 +674,7 @@ def search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, option
                         motif["hits"][seq_id] = 1
 
         # write binding sites per promoter to file
-        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle: # TODO w or wb?
+        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle:
             table = csv.writer(handle, delimiter = "\t", lineterminator = "\n")
             table.writerow(["#", "promoter", "binding sites"]) # table head
             for i in xrange(len(promoters)):
