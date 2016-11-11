@@ -192,7 +192,7 @@ def find_clusters(seq_record, rulesdict):
 
     for feature in features:
         if state == "seed":
-            if not 'sec_met' in feature.qualifiers or len([feat for feat in feature.qualifiers['sec_met'] if "Type: " in feat]) == 0:
+            if 'sec_met' not in feature.qualifiers or len([feat for feat in feature.qualifiers['sec_met'] if "Type: " in feat]) == 0:
                 continue
             coregenetype = [feat for feat in feature.qualifiers['sec_met'] if "Type: " in feat][0].partition("Type: ")[2]
             clustertype = coregenetype
@@ -223,7 +223,7 @@ def find_clusters(seq_record, rulesdict):
             else:
                 cutoff = rulesdict[clustertype][1]
                 extension = rulesdict[clustertype][2]
-            if not 'sec_met' in feature.qualifiers:
+            if 'sec_met' not in feature.qualifiers:
                 if feature.location.start > cluster.location.end + cutoff:
                     # ok, no hits for too long, done with this cluster
                     state = "seed"
@@ -443,14 +443,15 @@ def get_nseq():
             if line.startswith('NSEQ '):
                 nseqdict[hmm.name] = line[6:].strip()
                 break
-        if not hmm.name in nseqdict:
+        if hmm.name not in nseqdict:
             nseqdict[hmm.name] = "?"
 
     return nseqdict
 
 
 def overlaps(feature1, feature2):
-    if (feature2.location.start <= feature1.location.start <= feature2.location.end) or (feature2.location.start <= feature1.location.end <= feature2.location.end):
+    if (feature2.location.start <= feature1.location.start <= feature2.location.end
+            or feature2.location.start <= feature1.location.end <= feature2.location.end):
         return True
     else:
         return False
@@ -523,7 +524,7 @@ def store_detection_details(rulesdict, seq_record):
         else:
             clustertypes = [type_combo]
 
-        if not 'note' in cluster.qualifiers:
+        if 'note' not in cluster.qualifiers:
             cluster.qualifiers['note'] = []
         rule_string = "Detection rule(s) for this cluster type:"
         for clustertype in clustertypes:
@@ -537,7 +538,7 @@ def _update_sec_met_entry(feature, results, clustertype, nseqdict):
     result = "; ".join(["%s (E-value: %s, bitscore: %s, seeds: %s)" % (
         res.query_id, res.evalue, res.bitscore, nseqdict.get(res.query_id, '?')) for res in results])
 
-    if not 'sec_met' in feature.qualifiers:
+    if 'sec_met' not in feature.qualifiers:
         feature.qualifiers['sec_met'] = [
             "Type: %s" % clustertype,
             "Domains detected: %s" % (result),

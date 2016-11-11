@@ -15,12 +15,10 @@ import subprocess
 import csv
 from xml.etree import cElementTree as ElementTree
 
-import Bio
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 
 from antismash import (
-    config,
     utils,
 )
 
@@ -551,6 +549,16 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
     return promoters
 
 
+def get_anchor_promoter(anchor, promoters):
+    """Find the name of the promoter which includes the anchor gene"""
+    # the promoter ID string is not equal to the anchor ID string!
+    for i in xrange(len(promoters)):
+        if anchor in promoters[i]["id"]:
+            return i
+
+    return None
+
+
 def predict_motifs(anchor, anchor_promoter, promoters, options):
     """Run MEME tool to predict motifs (putative transcription factor binding sites) in promoter sequences"""
     # TODO options --> meme settings
@@ -943,6 +951,68 @@ def sort_by_abundance(islands):
     return clusters
 
 
+def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes):
+    """Get some more infos about each cluster prediction and check if it seems to be sane"""
+    for cp in xrange(len(cluster_predictions)):
+        prediction = cluster_predictions[cp]
+        sane = True
+
+        # find indices of first and last GENE of the cluster prediction in all genes
+        all_genes = map(lambda g: utils.get_gene_id(g), utils.get_all_features_of_type(seq_record, "gene"))
+        start_index_genes = None
+        end_index_genes = None
+        for i in xrange(len(all_genes)):
+            if not start_index_genes and prediction["start"]["gene"] is all_genes[i]:
+                start_index_genes = i
+            if not end_index_genes and prediction["end"]["gene"] is all_genes[i]:
+                end_index_genes = i
+            if start_index_genes and end_index_genes:
+                break
+
+        # find indices of first and last PROMOTER of the cluster prediction in all promoters
+        start_index_promotors = None
+        end_index_promoters = None
+        for i in xrange(len(promoters)):
+            if not start_index_promotors and prediction["start"]["gene"] in promoters[i]["id"]:
+                start_index_promotors = i
+            if not end_index_promoters and prediction["end"]["gene"] in promoters[i]["id"]:
+                end_index_promoters = i
+            if start_index_promotors and end_index_promoters:
+                break
+
+        cluster_length_genes = end_index_genes - start_index_genes + 1
+        cluster_length_promoters = end_index_promoters - start_index_promotors + 1
+        if cp == 0:
+            logging.info("Best prediction: {!r} -- {!r}, {} genes, {} promoters".format(
+                prediction["start"]["gene"], prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
+        else:
+            logging.info("Alternative prediction ({}): {!r} -- {!r}, {} genes, {} promoters".format(
+                cp, prediction["start"]["gene"], prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
+
+        # warn if cluster prediction right at or next to record (~ contig) border
+        if start_index_genes < 10:
+            logging.warning("Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
+            sane = False
+        if end_index_genes > len(all_genes) - 10:
+            logging.warning("Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
+            sane = False
+
+        # warn if cluster prediction too short (includes less than 3 genes)
+        if cluster_length_genes < 3:
+            logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
+            sane = False
+
+        # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
+        for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
+            if ignored_gene in all_genes[start_index_genes : end_index_genes + 1]:
+                logging.warning("Ignored gene {!r} could have affected the prediction".format(ignored_gene))
+                # sane = False
+                break
+
+        if sane:
+            break
+
+
 def detect(seq_record, options):
     """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
     logging.info("Detecting gene clusters using CASSIS method")
@@ -951,126 +1021,75 @@ def detect(seq_record, options):
 
     # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
     anchor_genes = get_anchor_genes(seq_record)
-    if not anchor_genes:
-        logging.info("Record has no anchor genes")
+    logging.info("Record has {} anchor genes".format(len(anchor_genes)))
+    if len(anchor_genes) == 0:
         return
 
     # filter all genes in record for neighbouring genes with overlapping annotations
     genes = utils.get_all_features_of_type(seq_record, "gene")
-    if not genes:
-        logging.info("Record has no features of type 'gene'")
+    logging.info("Record has {} features of type 'gene'".format(len(genes)))
+    if len(genes) == 0:
         return
     genes, ignored_genes = ignore_overlapping(genes)
 
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
-    upstream_tss = 1000; # nucleotides upstream TSS
-    downstream_tss = 50; # nucleotides downstream TSS
     promoters = [];
     try:
+        upstream_tss = 1000; # nucleotides upstream TSS
+        downstream_tss = 50; # nucleotides downstream TSS
         promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
     except (InvalidLocationError, DuplicatePromoterError):
         return
-    if not promoters:
+    if len(promoters) == 0:
         return
 
     if len(promoters) < 3:
         logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
-    else:
-        if len(promoters) < 40:
-            logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
-            logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
+        return
 
-        logging.info("Record has {} anchor genes".format(len(anchor_genes)))
-        for anchor in anchor_genes:
-            logging.info("Detecting cluster around anchor gene {!r}".format(anchor))
+    if len(promoters) < 40:
+        logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
+        logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
 
-            anchor_promoter = None
-            for i in xrange(len(promoters)):
-                # the promoter ID string is not equal to the anchor ID string!
-                if anchor in promoters[i]["id"]:
-                    anchor_promoter = i
-                    break
+    for anchor in anchor_genes:
+        logging.info("Detecting cluster around anchor gene {!r}".format(anchor))
 
-            if anchor_promoter is None:
-                logging.warning("No promoter region for {!r}, skipping anchor gene".format(anchor))
-                continue
+        anchor_promoter = get_anchor_promoter(anchor, promoters)
+        if anchor_promoter is None:
+            logging.warning("No promoter region for {!r}, skipping this anchor gene".format(anchor))
+            continue
 
-            # predict motifs with MEME around the anchor gene
-            motifs = predict_motifs(anchor, anchor_promoter, promoters, options)
+        # predict motifs with MEME around the anchor gene
+        motifs = predict_motifs(anchor, anchor_promoter, promoters, options)
 
-            if len(motifs) == 0:
-                logging.info("Could not predict motifs around {!r}, skipping anchor gene".format(anchor))
-                continue
+        if len(motifs) == 0:
+            logging.info("Could not predict motifs around {!r}, skipping this anchor gene".format(anchor))
+            continue
 
-            # search predicted binding sites with FIMO in all promoter sequences
-            # and count number of occurrences per promoter
-            motifs = search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options)
+        # search predicted binding sites with FIMO in all promoter sequences
+        # and count number of occurrences per promoter
+        motifs = search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options)
 
-            if len(motifs) == 0:
-                logging.info("Could not find motif occurrences for {!r}, skipping anchor gene".format(anchor))
-                continue
+        if len(motifs) == 0:
+            logging.info("Could not find motif occurrences for {!r}, skipping this anchor gene".format(anchor))
+            continue
 
-            # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
-            # Alternative to MEME and FIMO. Part of the original CASSIS implementation.
-            # No motif prediction (no MEME). Motif search with SiTaR (instead if FIMO).
-            # Have to provide a file in FASTA format with binding site sequences of at least one transcription factor.
-            # Will result in binding sites per promoter (like FIMO) --> find islands
-            #
-            # implement: YES? NO?
+        # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
+        # Alternative to MEME and FIMO. Part of the original CASSIS implementation.
+        # No motif prediction (no MEME). Motif search with SiTaR (instead if FIMO).
+        # Have to provide a file in FASTA format with binding site sequences of at least one transcription factor.
+        # Will result in binding sites per promoter (like FIMO) --> find islands
+        #
+        # implement: YES? NO?
 
-            # find islands of binding sites around anchor gene
-            islands = find_islands(anchor_promoter, motifs, promoters, options)
-            logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
+        # find islands of binding sites around anchor gene
+        islands = find_islands(anchor_promoter, motifs, promoters, options)
+        logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
 
-            # return cluster predictions sorted by border abundance
-            # most abundant --> "best" prediction --> index 0
-            # so far, only use best prediction (this may change in later versions of this plugin)
-            # cluster_predictions = sort_by_abundance(islands)
-            cluster_prediction = sort_by_abundance(islands)[0]
-
-            # find indices of first and last GENE of the cluster prediction in all genes
-            all_genes = map(lambda g: utils.get_gene_id(g), utils.get_all_features_of_type(seq_record, "gene"))
-            start_index_genes = None
-            end_index_genes = None
-            for i in xrange(len(all_genes)):
-                if not start_index_genes and cluster_prediction["start"]["gene"] is all_genes[i]:
-                    start_index_genes = i
-                if not end_index_genes and cluster_prediction["end"]["gene"] is all_genes[i]:
-                    end_index_genes = i
-                if start_index_genes and end_index_genes:
-                    break
-
-            # find indices of first and last PROMOTER of the cluster prediction in all promoters
-            start_index_promotors = None
-            end_index_promoters = None
-            for i in xrange(len(promoters)):
-                if not start_index_promotors and cluster_prediction["start"]["gene"] in promoters[i]["id"]:
-                    start_index_promotors = i
-                if not end_index_promoters and cluster_prediction["end"]["gene"] in promoters[i]["id"]:
-                    end_index_promoters = i
-                if start_index_promotors and end_index_promoters:
-                    break
-
-            cluster_length_genes = end_index_genes - start_index_genes + 1
-            cluster_length_promoters = end_index_promoters - start_index_promotors + 1
-            logging.info("Best prediction: {!r} -- {!r}, {} genes, {} promoters".format(
-                cluster_prediction["start"]["gene"], cluster_prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
-
-            # warn if cluster prediction right at or next to record (~ contig) border
-            if start_index_genes < 10:
-                logging.warning("Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
-            if end_index_genes > len(all_genes) - 10:
-                logging.warning("Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
-
-            # warn if cluster prediction too short (includes less than 3 genes)
-            if cluster_length_genes < 3:
-                logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
-
-            # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
-            for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
-                if ignored_gene in all_genes[start_index_genes : end_index_genes + 1]:
-                    logging.warning("Ignored gene {!r} could have affected the prediction".format(ignored_gene))
-                    break
+        # return cluster predictions sorted by border abundance
+        # most abundant --> "best" prediction --> index 0
+        cluster_predictions = sort_by_abundance(islands)
+        check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
 
 
 def get_versions(options):
