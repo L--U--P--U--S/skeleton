@@ -17,6 +17,8 @@ from xml.etree import cElementTree as ElementTree
 
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
+from Bio import SeqFeature
+from Bio.SeqFeature import FeatureLocation
 
 from antismash import (
     utils,
@@ -931,9 +933,16 @@ def sort_by_abundance(islands):
             ends[i["end"]["id"][-1]] = {"abund": 1}
 
         # also keep track of motif score
-        # --> sort by score if same abundance occurs more than once
+        # --> used to sort by score if same abundance occurs more than once
         starts[i["start"]["id"][0]]["mscore"] = i["motif"]["score"]
         ends[i["end"]["id"][-1]]["mscore"] = i["motif"]["score"]
+
+        # finally, save motif "names"
+        # --> just nice to have information for showing the results later on
+        starts[i["start"]["id"][0]]["plus"] = i["motif"]["plus"]
+        starts[i["start"]["id"][0]]["minus"] = i["motif"]["minus"]
+        ends[i["end"]["id"][-1]]["plus"] = i["motif"]["plus"]
+        ends[i["end"]["id"][-1]]["minus"] = i["motif"]["minus"]
 
     # compute sum of start and end abundance, remove duplicates, sort descending
     abundances_sum_sorted = sorted(set([s["abund"] + e["abund"] for s in starts.values() for e in ends.values()]), reverse=True)
@@ -954,11 +963,34 @@ def sort_by_abundance(islands):
                     if (starts[start]["abund"] + ends[end]["abund"] == abundance
                             and float(starts[start]["mscore"]) + float(ends[end]["mscore"]) == score):
                         clusters.append({
-                            "start": {"gene": start, "abundance": starts[start]["abund"], "score": starts[start]["mscore"]},
-                            "end": {"gene": end, "abundance": ends[end]["abund"], "score": ends[end]["mscore"]}
+                            "start": {
+                                "gene": start,
+                                "abundance": starts[start]["abund"],
+                                "score": starts[start]["mscore"],
+                                "plus": starts[start]["plus"],
+                                "minus": starts[start]["minus"],
+                            },
+                            "end": {
+                                "gene": end,
+                                "abundance": ends[end]["abund"],
+                                "score": ends[end]["mscore"],
+                                "plus": ends[end]["plus"],
+                                "minus": ends[end]["minus"],
+                            },
                         })
-                        logging.debug("[Gene {}; abundance {}; score {}] -- [Gene {}; abundance {}; score {}]".format(
-                            start, starts[start]["abund"], starts[start]["mscore"], end, ends[end]["abund"], ends[end]["mscore"]))
+
+                        logging.debug("Upstream border:   gene {}; abundance {}; motif {}; score {}".format(
+                            start,
+                            starts[start]["abund"],
+                            mprint(starts[start]["plus"], starts[start]["minus"]),
+                            starts[start]["mscore"],
+                        ))
+                        logging.debug("Downstream border: gene {}; abundance {}; motif {}; score {}".format(
+                            end,
+                            ends[end]["abund"],
+                            mprint(ends[end]["plus"], ends[end]["minus"]),
+                            ends[end]["mscore"],
+                        ))
                         logging.debug("Total abundance {}, total score {:.1e}".format(
                             abundance, score))
 
@@ -968,9 +1000,8 @@ def sort_by_abundance(islands):
 def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes):
     """Get some more infos about each cluster prediction and check if it seems to be sane"""
     checked_predictions = []
-    for i in xrange(len(cluster_predictions)):
-        prediction = cluster_predictions[i]
-        prediction["priority"] = i + 1
+    for cp in xrange(len(cluster_predictions)):
+        prediction = cluster_predictions[cp]
         sane = True
 
         # find indices of first and last GENE of the cluster prediction in all genes
@@ -998,15 +1029,15 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
 
         prediction["start"]["promoter"] = get_promoter_id(promoters[start_index_promoters])
         prediction["end"]["promoter"] = get_promoter_id(promoters[end_index_promoters])
-        prediction["length_genes"] = end_index_genes - start_index_genes + 1
-        prediction["length_promoters"] = end_index_promoters - start_index_promoters + 1
+        prediction["genes"] = end_index_genes - start_index_genes + 1
+        prediction["promoters"] = end_index_promoters - start_index_promoters + 1
 
-        if prediction["priority"] == 1:
+        if cp == 0:
             logging.info("Best prediction (most abundant): {!r} -- {!r}".format(
                 prediction["start"]["gene"], prediction["end"]["gene"]))
         else:
             logging.info("Alternative prediction ({}): {!r} -- {!r}".format(
-                prediction["priority"], prediction["start"]["gene"], prediction["end"]["gene"]))
+                cp, prediction["start"]["gene"], prediction["end"]["gene"]))
 
         # warn if cluster prediction right at or next to record (~ contig) border
         if start_index_genes < 10:
@@ -1019,7 +1050,7 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
             sane = False
 
         # warn if cluster prediction too short (includes less than 3 genes)
-        if prediction["length_genes"] < 3:
+        if prediction["genes"] < 3:
             logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
             sane = False
 
@@ -1119,15 +1150,51 @@ def detect(seq_record, options):
         # return cluster predictions sorted by border abundance
         # (most abundant --> "best" prediction)
         cluster_predictions = sort_by_abundance(islands)
-
         cluster_predictions = check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
 
-def get_versions(options):
-    """Get all utility versions"""
-    return map(lambda x: " ".join(x), _required_binaries)
+        store_clusters(anchor, cluster_predictions, seq_record)
+        break
 
 
-# TODO implement for cassis?
+def store_clusters(anchor, clusters, seq_record):
+    """Store the borders of predicted clusters to the SeqRecord"""
+    for i in xrange(len(clusters)):
+        cluster = clusters[i]
+        left = utils.get_all_features_of_type_with_query(
+            # there should be no second gene with the same locus tag
+            seq_record, "gene", "locus_tag", cluster["start"]["gene"])[0]
+        right = utils.get_all_features_of_type_with_query(
+            # there should be no second gene with the same locus tag
+            seq_record, "gene", "locus_tag", cluster["end"]["gene"])[0]
+        new_feature = SeqFeature.SeqFeature(
+            FeatureLocation(left.location.start, right.location.end), type = "cluster_border")
+        new_feature.qualifiers = {
+            "tool"             : "cassis",
+            "anchor"           : anchor,
+            "abundance"        : cluster["start"]["abundance"] + cluster["end"]["abundance"],
+            "motif_score"      : "{:.1e}".format(float(cluster["start"]["score"]) + float(cluster["end"]["score"])),
+            "gene_left"        : cluster["start"]["gene"],
+            "promoter_left"    : cluster["start"]["promoter"],
+            "abundance_left"   : cluster["start"]["abundance"],
+            "motif_left"       : mprint(cluster["start"]["plus"], cluster["start"]["minus"]),
+            "motif_score_left" : "{:.1e}".format(float(cluster["start"]["score"])),
+            "gene_right"       : cluster["end"]["gene"],
+            "promoter_right"   : cluster["end"]["promoter"],
+            "abundance_right"  : cluster["end"]["abundance"],
+            "motif_right"      : mprint(cluster["end"]["plus"], cluster["end"]["minus"]),
+            "motif_score_right": "{:.1e}".format(float(cluster["end"]["score"])),
+            "genes"            : cluster["genes"],
+            "promoters"        : cluster["promoters"],
+        }
+
+        if i == 0:
+            new_feature.qualifiers["note"] = "best prediction (most abundant) for anchor gene {}".format(anchor)
+        else:
+            new_feature.qualifiers["note"] = "alternative prediction ({}) for anchor gene {}".format(i, anchor)
+
+        seq_record.features.append(new_feature)
+
+
 #def store_detection_details(rulesdict, seq_record):
 #    '''Store the details about why a cluster was detected'''
 #    clusters = utils.get_cluster_features(seq_record)
@@ -1146,7 +1213,6 @@ def get_versions(options):
 #
 #        cluster.qualifiers['note'].append(rule_string)
 
-# TODO implement for cassis? (Kai?)
 #def _update_sec_met_entry(feature, results, clustertype, nseqdict):
 #    '''Update the sec_met entry for a feature'''
 #    result = "; ".join(["%s (E-value: %s, bitscore: %s, seeds: %s)" % (
