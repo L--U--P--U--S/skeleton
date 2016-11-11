@@ -74,6 +74,11 @@ def get_anchor_genes(seq_record):
     return anchor_genes
 
 
+def mprint(plus, minus):
+    """Motif-print: nicely format motif name in plus/minus style"""
+    return "+{:02d}_-{:02d}".format(plus, minus)
+
+
 def get_promoter_id(promoter):
     """Return promoter ID string dependend on involved gene(s)"""
     if len(promoter["id"]) == 1: # 1 gene --> 1 promoter
@@ -578,11 +583,11 @@ def prepare_motifs(meme_dir, anchor_promoter, promoters):
         end_index = anchor_promoter + pm["plus"]
 
         if start_index < 0: # anchor promoter near beginning of record --> truncate
-            logging.debug("Promoter set +{}_-{} exceeds upstream record border".format(pm["plus"], pm["minus"]))
+            logging.debug("Promoter set " + mprint(pm["plus"], pm["minus"]) + " exceeds upstream record border")
             start_index = 0
 
         if end_index > len(promoters) - 1: # anchor promoter near end of record --> truncate
-            logging.debug("Promoter set +{}_-{} exceeds downstream record border".format(pm["plus"], pm["minus"]))
+            logging.debug("Promoter set " + mprint(pm["plus"], pm["minus"]) + " exceeds downstream record border")
             end_index = len(promoters) - 1
 
         # discard promoter sets, which reappear due to truncation
@@ -590,7 +595,7 @@ def prepare_motifs(meme_dir, anchor_promoter, promoters):
             indices.add((start_index, end_index))
             motifs.append({"plus": pm["plus"], "minus": pm["minus"], "score": None})
 
-            pm_dir = os.path.join(meme_dir, "+{}_-{}".format(pm["plus"], pm["minus"]))
+            pm_dir = os.path.join(meme_dir, mprint(pm["plus"], pm["minus"]))
             if not os.path.exists(pm_dir):
                 os.makedirs(pm_dir)
 
@@ -605,7 +610,7 @@ def prepare_motifs(meme_dir, anchor_promoter, promoters):
                         seq.id += "__ANCHOR"
                     SeqIO.write(seq, pm_handle, "fasta")
         else:
-            logging.debug("Duplicate promoter set +{}_-{}".format(pm["plus"], pm["minus"]))
+            logging.debug("Duplicate promoter set " + mprint(pm["plus"], pm["minus"]))
 
     return motifs
 
@@ -625,14 +630,14 @@ def run_meme(meme_dir, options):
 def filter_meme_results(meme_dir, motifs, anchor):
     """Analyse and filter MEME results"""
     for motif in motifs:
-        xml_file = os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "meme.xml")
+        xml_file = os.path.join(meme_dir, mprint(motif["plus"], motif["minus"]), "meme.xml")
         e = ElementTree.parse(xml_file).getroot()
         reason = e.find("model/reason_for_stopping").text
         anchor_seq_id = ""
 
         # no motif found for given e-value cutoff :-(
         if "Stopped because motif E-value > " in reason:
-            logging.debug("Motif +{:02d}/-{:02d}: e-value exceeds cutoff".format(motif["plus"], motif["minus"]))
+            logging.debug("MEME: motif " + mprint(motif["plus"], motif["minus"]) + "; e-value exceeds cutoff")
 
         # motif(s) found :-)
         elif "Stopped because requested number of motifs (1) found" in reason:
@@ -654,15 +659,14 @@ def filter_meme_results(meme_dir, motifs, anchor):
                     for site in contributing_sites]
 
                 # write sites to fasta file
-                with open(os.path.join(meme_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "binding_sites.fasta"), "w") as handle:
-                    handle.write(">{}__+{}_-{}\n".format(anchor, motif["plus"], motif["minus"]))
+                with open(os.path.join(meme_dir, mprint(motif["plus"], motif["minus"]), "binding_sites.fasta"), "w") as handle:
+                    handle.write(">{}__{}\n".format(anchor, mprint(motif["plus"], motif["minus"])))
                     handle.write("\n".join(motif["seqs"]))
 
-                logging.debug("Motif +{:02d}/-{:02d}: e-value = {}".format(
-                    motif["plus"], motif["minus"], motif["score"]))
+                logging.debug("MEME: motif {}; e-value = {}".format(
+                    mprint(motif["plus"], motif["minus"]), motif["score"]))
             else:
-                logging.debug("Motif +{:02d}/-{:02d}: does not occur in anchor gene promoter".format(
-                    motif["plus"], motif["minus"]))
+                logging.debug("MEME: motif " + mprint(motif["plus"], motif["minus"]) + "; does not occur in anchor gene promoter")
 
         # unexpected reason, don't know why MEME stopped :-$
         else:
@@ -694,7 +698,7 @@ def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
     """Analyse and filter MEME results"""
     for motif in motifs:
         motif["hits"] = {}
-        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle:
+        with open(os.path.join(fimo_dir, mprint(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle:
             table = csv.reader(handle, delimiter = "\t")
             for row in table:
                 if not row[0].startswith("#"): # skip comment lines
@@ -705,7 +709,7 @@ def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
                         motif["hits"][seq_id] = 1
 
         # write binding sites per promoter to file
-        with open(os.path.join(fimo_dir, "+{}_-{}".format(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle:
+        with open(os.path.join(fimo_dir, mprint(motif["plus"], motif["minus"]), "bs_per_promoter.csv"), "w") as handle:
             table = csv.writer(handle, delimiter = "\t", lineterminator = "\n")
             table.writerow(["#", "promoter", "binding sites"]) # table head
             for i in xrange(len(promoters)):
@@ -718,23 +722,22 @@ def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
         percentage = float(len(motif["hits"])) / float(len(promoters)) * 100 # float!
         if percentage == 0.0:
             # too low
-            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters (no hits)".format(
-                motif["plus"], motif["minus"], len(motif["hits"])))
+            logging.debug("Motif {}; occurs in {} promoters (no hits)".format(
+                mprint(motif["plus"], motif["minus"]), len(motif["hits"])))
             motif["hits"] = None
         elif percentage > 14.0: # TODO options
             # too high
-            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters (too many)".format(
-                motif["plus"], motif["minus"], len(motif["hits"]), percentage))
+            logging.debug("FIMO: {}; occurs in {} promoters; {:.2f}% of all promoters (too many)".format(
+                mprint(motif["plus"], motif["minus"]), len(motif["hits"]), percentage))
             motif["hits"] = None
         elif get_promoter_id(promoters[anchor_promoter]) not in motif["hits"]: # not in achor promoter
             # no site in anchor promoter
-            logging.debug("Motif +{:02d}/-{:02d}: not hits in the promoter of the anchor gene".format(
-                motif["plus"], motif["minus"]))
+            logging.debug("FIMO: motif " + mprint(motif["plus"], motif["minus"]) + "; not hits in the promoter of the anchor gene")
             motif["hits"] = None
         else:
             # everything ok
-            logging.debug("Motif +{:02d}/-{:02d}: occurs in {} promoters, {:.2f}% of all promoters".format(
-                motif["plus"], motif["minus"], len(motif["hits"]), percentage))
+            logging.debug("FIMO: motif {}; occurs in {} promoters; {:.2f}% of all promoters".format(
+                mprint(motif["plus"], motif["minus"]), len(motif["hits"]), percentage))
 
     return filter(lambda m: m["hits"] is not None, motifs)
 
@@ -903,8 +906,8 @@ def find_islands(anchor_promoter, motifs, promoters, options):
 
             i += 1
 
-        logging.debug("Island {} -- {} (motif +{:02d}/-{:02d})".format(
-            get_promoter_id(promoters[start]), get_promoter_id(promoters[end]), motif["plus"], motif["minus"]))
+        logging.debug("Island {} -- {} (motif {})".format(
+            get_promoter_id(promoters[start]), get_promoter_id(promoters[end]), mprint(motif["plus"], motif["minus"])))
         islands.append({"start": promoters[start], "end": promoters[end], "motif": motif})
 
     return islands
