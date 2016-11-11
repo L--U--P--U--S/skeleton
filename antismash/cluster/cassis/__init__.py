@@ -27,7 +27,7 @@ from antismash import (
 
 
 name = "cassis"
-short_description = "{}: Detect secondary metabolite gene cluster (motif based)".format(name)
+short_description = name + ": Detect secondary metabolite gene cluster (motif based)"
 priority = 2 # first run hmmdetect plugin to detect core genes (anchor genes) --> seed for cluster prediction with cassis
 
 _required_binaries = [
@@ -92,7 +92,8 @@ def ignore_overlapping(genes):
                     (genes[i-1].location.start <= genes[i].location.start and genes[i-1].location.end >= genes[i].location.end)):
                     # A <---------->
                     # B   <----->
-                logging.warning("Ignoring {} (overlapping with {})".format(utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # TODO info or warning?
+                logging.warning("Ignoring {!r} (overlapping with {!r})".format(
+                    utils.get_gene_id(genes[i]), utils.get_gene_id(genes[i-1]))) # TODO info or warning?
                 ignored.append(genes[i])
                 overlap = True
             else:
@@ -117,7 +118,6 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
     promoters = [] # TODO use SeqRecords instead of dicts or even create a class promoter (class cluster, class motif)?
     invalid = 0
 
-    # TODO "format()" or "%s" or "s + s"?
     pos_handle = open(os.path.join(options.outputfoldername, seq_record.name + "_promoter_positions.csv"), "w")
     pos_handle.write("\t".join(["#", "promoter", "start", "end", "length"]) + "\n")
     seq_handle = open(os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta"), "w")
@@ -164,7 +164,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i])) # TODO logging.error --> raise?
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i]))) # TODO logging.error --> raise?
 
             elif genes[i].location.strand == -1:
                 #4
@@ -200,7 +200,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": record_seq_length
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
         # first gene of the record AND NOT special case #9
         elif (i == 0 and not
@@ -242,7 +242,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
             elif genes[i].location.strand == -1:
                 #4
@@ -278,7 +278,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i+1].location.start - 1
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
         # last gene of record
         elif i == len(genes) - 1 and not skip:
@@ -317,7 +317,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
             elif genes[i].location.strand == -1:
                 #4
@@ -353,7 +353,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": record_seq_length
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
         # special-case 9
         elif (genes[i].location.strand == -1 and
@@ -393,7 +393,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     "end": genes[i+1].end
                 })
             else:
-                logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
             skip = 1
 
@@ -434,7 +434,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i].location.end
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
             elif genes[i].location.strand == -1:
                 #4
@@ -470,7 +470,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "end": genes[i+1].location.start - 1
                     })
                 else:
-                    logging.error("Problem with promoter of gene '%s'", utils.get_gene_id(genes[i]))
+                    logging.error("Problem with promoter of gene {!r}".format(utils.get_gene_id(genes[i])))
 
         # negative start position or stop position "beyond" record --> might happen in very small records
         if promoters[-1]["start"] < 1:
@@ -504,15 +504,15 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                 invalid += 1
 
                 if invalid_promoter_sequence == "length":
-                    logging.warning("Promoter %s is invalid (length is %s)",
-                        get_promoter_id(promoters[-1]), promoter_length)
+                    logging.warning("Promoter {!r} is invalid (length is {})".format(
+                        get_promoter_id(promoters[-1]), promoter_length))
                 else:
                     # especially SiTaR doesn't like such missings
-                    logging.warning("Promoter %s is invalid (sequence without %s)",
-                        get_promoter_id(promoters[-1]), invalid_promoter_sequence)
+                    logging.warning("Promoter {!r} is invalid (sequence without {!r})".format(
+                        get_promoter_id(promoters[-1]), invalid_promoter_sequence))
 
                 # more details for debug logging
-                logging.debug("Invalid promoter {}\n start {}\n end {}\n length {}\n".format(
+                logging.debug("Invalid promoter {!r}\n start {}\n end {}\n length {}\n".format(
                     promoters[-1]["id"], promoters[-1]["start"], promoters[-1]["end"], promoter_length))
 
                 promoters.pop() # remove last (invalid!) promoter
@@ -534,8 +534,8 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
 
         # check if promoter IDs are unique
         if len(promoters) >= 2 and get_promoter_id(promoters[-1]) == get_promoter_id(promoters[-2]):
-            logging.error("Promoter %s occurs at least twice. This may be caused by overlapping gene annotations",
-                get_promoter_id(promoters[-1]))
+            logging.error("Promoter {!r} occurs at least twice. This may be caused by overlapping gene annotations".format(
+                get_promoter_id(promoters[-1])))
             # TODO die? raise exception?
 
     if invalid:
@@ -642,7 +642,7 @@ def predict_motifs(anchor, anchor_promoter, promoters, options):
 
         # unexpected reason, don't know why MEME stopped :-$
         else:
-            logging.error("MEME stopped unexpectedly (reason: {})".format(reason))
+            logging.error("MEME stopped unexpectedly (reason: " + reason + ")")
 
     return filter(lambda m: m["score"] is not None, motifs)
 
@@ -967,12 +967,12 @@ def detect(seq_record, options):
         logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
     else:
         if len(promoters) < 40:
-            logging.warning("Sequence {!r} yields only {} promoter regions. Cluster detection on small sequences may lead to incomplete cluster predictions".format(
-                seq_record.name, len(promoters)))
+            logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
+            logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
 
         logging.info("Record has {} anchor genes".format(len(anchor_genes)))
         for anchor in anchor_genes:
-            logging.info("Detecting cluster around anchor gene {}".format(anchor))
+            logging.info("Detecting cluster around anchor gene {!r}".format(anchor))
 
             anchor_promoter = None
             for i in xrange(len(promoters)):
@@ -982,14 +982,14 @@ def detect(seq_record, options):
                     break
 
             if anchor_promoter is None:
-                logging.warning("No promoter region for {}, skipping anchor gene".format(anchor))
+                logging.warning("No promoter region for {!r}, skipping anchor gene".format(anchor))
                 continue
 
             # predict motifs with MEME around the anchor gene
             motifs = predict_motifs(anchor, anchor_promoter, promoters, options)
 
             if len(motifs) == 0:
-                logging.info("Could not predict motifs around {}, skipping anchor gene".format(anchor))
+                logging.info("Could not predict motifs around {!r}, skipping anchor gene".format(anchor))
                 continue
 
             # search predicted binding sites with FIMO in all promoter sequences
@@ -997,7 +997,7 @@ def detect(seq_record, options):
             motifs = search_motifs(anchor, anchor_promoter, motifs, promoters, seq_record, options)
 
             if len(motifs) == 0:
-                logging.info("Could not find motif occurrences for {}, skipping anchor gene".format(anchor))
+                logging.info("Could not find motif occurrences for {!r}, skipping anchor gene".format(anchor))
                 continue
 
             # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
@@ -1010,7 +1010,7 @@ def detect(seq_record, options):
 
             # find islands of binding sites around anchor gene
             islands = find_islands(anchor_promoter, motifs, promoters, options)
-            logging.debug("{} cluster predictions for {}".format(len(islands), anchor))
+            logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
 
             # return cluster predictions sorted by border abundance
             # most abundant --> "best" prediction --> index 0
@@ -1043,7 +1043,7 @@ def detect(seq_record, options):
 
             cluster_length_genes = end_index_genes - start_index_genes + 1
             cluster_length_promoters = end_index_promoters - start_index_promotors + 1
-            logging.info("Best prediction: {} -- {}, {} genes, {} promoters".format(
+            logging.info("Best prediction: {!r} -- {!r}, {} genes, {} promoters".format(
                 cluster_prediction["start"]["gene"], cluster_prediction["end"]["gene"], cluster_length_genes, cluster_length_promoters))
 
             # warn if cluster prediction right at or next to record (~ contig) border
@@ -1059,7 +1059,7 @@ def detect(seq_record, options):
             # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
             for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
                 if ignored_gene in all_genes[start_index_genes : end_index_genes + 1]:
-                    logging.warning("Ignored gene {} could have affected the prediction".format(ignored_gene))
+                    logging.warning("Ignored gene {!r} could have affected the prediction".format(ignored_gene))
                     break
 
 

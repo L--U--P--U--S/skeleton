@@ -14,6 +14,7 @@ import sys
 import os
 from multiprocessing import Pool
 import subprocess
+# import logging
 
 meme_dir = sys.argv[1]
 fimo_dir = sys.argv[2]
@@ -22,6 +23,7 @@ cpus = int(sys.argv[4])
 motifs = []
 
 def run_fimo(motif):
+    # TODO add logging.debug message for each fimo call
     exit_code = subprocess.call([
         "fimo",
         "-verbosity", "1",

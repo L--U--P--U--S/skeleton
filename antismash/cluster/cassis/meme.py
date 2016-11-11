@@ -14,12 +14,14 @@ import sys
 import os
 from multiprocessing import Pool
 import subprocess
+# import logging
 
 meme_dir = sys.argv[1]
 cpus = int(sys.argv[2])
 promoter_sequences = []
 
 def run_meme(fasta):
+    # TODO add logging.debug message for each meme call
     exit_code = subprocess.call([
         "meme",
         fasta,
