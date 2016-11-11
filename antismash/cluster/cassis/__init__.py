@@ -1094,8 +1094,7 @@ def detect(seq_record, options):
 
 def get_versions(options):
     """Get all utility versions"""
-    # TODO meme, fimo, …
-    return []
+    return map(lambda x: " ".join(x), _required_binaries)
 
 
 # TODO implement for cassis?
