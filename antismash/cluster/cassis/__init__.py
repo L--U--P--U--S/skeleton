@@ -1057,7 +1057,10 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
         # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
         for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
             if ignored_gene in all_genes[start_index_genes : end_index_genes + 1]:
-                logging.warning("Ignored gene {!r} could have affected the prediction".format(ignored_gene))
+                logging.warning("Gene {!r} is part of the predicted cluster, but it is overlapping with another gene and was ignored".format(
+                    ignored_gene))
+                logging.warning("Gene {!r} could have effected the cluster prediction".format(
+                    ignored_gene))
                 # sane = False
                 break
 
