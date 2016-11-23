@@ -30,6 +30,8 @@ from antismash.utils.errors import (
 )
 
 
+### plugin variables ###
+
 name = "cassis"
 short_description = name + ": Detect secondary metabolite gene cluster (motif based)"
 priority = 2 # first run hmmdetect plugin to detect core genes (anchor genes) --> seed for cluster prediction with cassis
@@ -49,6 +51,7 @@ for plus in range(16):
             _plus_minus.append({"plus": plus, "minus": minus})
 
 
+### utility methods ###
 def check_prereqs(options):
     """Check for prerequisites"""
     failure_messages = []
@@ -65,17 +68,7 @@ def get_versions(options):
     return map(lambda x: " ".join(x), _required_binaries)
 
 
-def get_anchor_genes(seq_record):
-    """Return all genes which are putative cluster anchor genes"""
-    anchor_genes = []
-
-    for feature in seq_record.features:
-        if "sec_met" in feature.qualifiers:
-            anchor_genes.append(feature.qualifiers["locus_tag"][0])
-
-    return anchor_genes
-
-
+### helper methods ###
 def mprint(plus, minus):
     """Motif-print: nicely format motif name in plus/minus style"""
     return "+{:02d}_-{:02d}".format(plus, minus)
@@ -87,6 +80,105 @@ def get_promoter_id(promoter):
         return promoter["id"][0]
     else: # 2 bidirectional genes --> 1 shared promoter
         return "{}+{}".format(promoter["id"][0], promoter["id"][1])
+
+
+### main method ###
+def detect(seq_record, options):
+    """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
+    logging.info("Detecting gene clusters using CASSIS method")
+
+    # TODO options? cassis settings/parameters?
+
+    # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
+    anchor_genes = get_anchor_genes(seq_record)
+    logging.info("Record has {} anchor genes".format(len(anchor_genes)))
+    if len(anchor_genes) == 0:
+        return
+
+    # filter all genes in record for neighbouring genes with overlapping annotations
+    genes = utils.get_all_features_of_type(seq_record, "gene")
+    logging.info("Record has {} features of type 'gene'".format(len(genes)))
+    if len(genes) == 0:
+        return
+    genes, ignored_genes = ignore_overlapping(genes)
+
+    # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
+    promoters = [];
+    try:
+        upstream_tss = 1000; # nucleotides upstream TSS
+        downstream_tss = 50; # nucleotides downstream TSS
+        promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
+    except (InvalidLocationError, DuplicatePromoterError):
+        return
+    if len(promoters) == 0:
+        return
+
+    if len(promoters) < 3:
+        logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
+        return
+
+    if len(promoters) < 40:
+        logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
+        logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
+
+    for i in xrange(len(anchor_genes)):
+        anchor = anchor_genes[i]
+        logging.info("Detecting cluster around anchor gene {!r} ({} of {})".format(anchor, i + 1, len(anchor_genes)))
+
+        anchor_promoter = get_anchor_promoter(anchor, promoters)
+        if anchor_promoter is None:
+            logging.warning("No promoter region for {!r}, skipping this anchor gene".format(anchor))
+            continue
+
+        # predict motifs with MEME ("de novo")
+        meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
+        motifs = prepare_motifs(meme_dir, anchor_promoter, promoters)
+        run_meme(meme_dir, options)
+        motifs = filter_meme_results(meme_dir, motifs, anchor)
+
+        if len(motifs) == 0:
+            logging.info("Could not predict motifs around {!r}, skipping this anchor gene".format(anchor))
+            continue
+
+        # search motifs with FIMO ("scanning")
+        fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor)
+        run_fimo(meme_dir, fimo_dir, seq_record, options)
+        motifs = filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options)
+
+        if len(motifs) == 0:
+            logging.info("Could not find motif occurrences for {!r}, skipping this anchor gene".format(anchor))
+            continue
+
+        # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
+        # Alternative to MEME and FIMO. Part of the original CASSIS implementation.
+        # No motif prediction (no MEME). Motif search with SiTaR (instead if FIMO).
+        # Have to provide a file in FASTA format with binding site sequences of at least one transcription factor.
+        # Will result in binding sites per promoter (like FIMO) --> find islands
+        #
+        # implement: YES? NO?
+
+        # find islands of binding sites around anchor gene
+        islands = find_islands(anchor_promoter, motifs, promoters, options)
+        logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
+
+        # return cluster predictions sorted by border abundance
+        # (most abundant --> "best" prediction)
+        cluster_predictions = sort_by_abundance(islands)
+        cluster_predictions = check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
+
+        store_clusters(anchor, cluster_predictions, seq_record)
+
+
+### additional methods ###
+def get_anchor_genes(seq_record):
+    """Return all genes which are putative cluster anchor genes"""
+    anchor_genes = []
+
+    for feature in seq_record.features:
+        if "sec_met" in feature.qualifiers:
+            anchor_genes.append(feature.qualifiers["locus_tag"][0])
+
+    return anchor_genes
 
 
 def ignore_overlapping(genes):
@@ -616,18 +708,6 @@ def prepare_motifs(meme_dir, anchor_promoter, promoters):
     return motifs
 
 
-def run_meme(meme_dir, options):
-    """Run MEME (in parallel) on each motif subdirectory"""
-    # FIXME for sure there is a more clever and elegant way to do this
-    # TODO options --> meme settings
-    exit_code = subprocess.call([
-        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "meme.py"),
-        meme_dir,
-        str(options.cpus)])
-    if exit_code != 0:
-        logging.error("meme.py discovered a problem (exit code {})".format(exit_code))
-
-
 def filter_meme_results(meme_dir, motifs, anchor):
     """Analyse and filter MEME results"""
     for motif in motifs:
@@ -674,26 +754,6 @@ def filter_meme_results(meme_dir, motifs, anchor):
             logging.error("MEME stopped unexpectedly (reason: " + reason + ")")
 
     return filter(lambda m: m["score"] is not None, motifs)
-
-
-def run_fimo(meme_dir, fimo_dir, seq_record, options):
-    """Run MEME (in parallel) on each motif subdirectory"""
-    promoter_sequences = os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta")
-
-    if not os.path.exists(fimo_dir):
-        os.makedirs(fimo_dir)
-
-    # run FIMO
-    # FIXME for sure there is a more clever and elegant way to do this
-    exit_code = subprocess.call([
-        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "fimo.py"),
-        meme_dir,
-        fimo_dir,
-        promoter_sequences,
-        str(options.cpus),
-    ])
-    if exit_code != 0:
-        logging.error("fimo.py discovered a problem (exit code {})".format(exit_code))
 
 
 def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
@@ -1072,95 +1132,8 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
     return checked_predictions
 
 
-def detect(seq_record, options):
-    """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
-    logging.info("Detecting gene clusters using CASSIS method")
-
-    # TODO options? cassis settings/parameters?
-
-    # get core genes from hmmdetect --> necessary CASSIS input, aka "anchor genes"
-    anchor_genes = get_anchor_genes(seq_record)
-    logging.info("Record has {} anchor genes".format(len(anchor_genes)))
-    if len(anchor_genes) == 0:
-        return
-
-    # filter all genes in record for neighbouring genes with overlapping annotations
-    genes = utils.get_all_features_of_type(seq_record, "gene")
-    logging.info("Record has {} features of type 'gene'".format(len(genes)))
-    if len(genes) == 0:
-        return
-    genes, ignored_genes = ignore_overlapping(genes)
-
-    # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
-    promoters = [];
-    try:
-        upstream_tss = 1000; # nucleotides upstream TSS
-        downstream_tss = 50; # nucleotides downstream TSS
-        promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
-    except (InvalidLocationError, DuplicatePromoterError):
-        return
-    if len(promoters) == 0:
-        return
-
-    if len(promoters) < 3:
-        logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
-        return
-
-    if len(promoters) < 40:
-        logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
-        logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
-
-    for i in xrange(len(anchor_genes)):
-        anchor = anchor_genes[i]
-        logging.info("Detecting cluster around anchor gene {!r} ({} of {})".format(anchor, i + 1, len(anchor_genes)))
-
-        anchor_promoter = get_anchor_promoter(anchor, promoters)
-        if anchor_promoter is None:
-            logging.warning("No promoter region for {!r}, skipping this anchor gene".format(anchor))
-            continue
-
-        # predict motifs with MEME ("de novo")
-        meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
-        motifs = prepare_motifs(meme_dir, anchor_promoter, promoters)
-        run_meme(meme_dir, options)
-        motifs = filter_meme_results(meme_dir, motifs, anchor)
-
-        if len(motifs) == 0:
-            logging.info("Could not predict motifs around {!r}, skipping this anchor gene".format(anchor))
-            continue
-
-        # search motifs with FIMO ("scanning")
-        fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor)
-        run_fimo(meme_dir, fimo_dir, seq_record, options)
-        motifs = filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options)
-
-        if len(motifs) == 0:
-            logging.info("Could not find motif occurrences for {!r}, skipping this anchor gene".format(anchor))
-            continue
-
-        # TODO SiTaR (http://bioinformatics.oxfordjournals.org/content/27/20/2806):
-        # Alternative to MEME and FIMO. Part of the original CASSIS implementation.
-        # No motif prediction (no MEME). Motif search with SiTaR (instead if FIMO).
-        # Have to provide a file in FASTA format with binding site sequences of at least one transcription factor.
-        # Will result in binding sites per promoter (like FIMO) --> find islands
-        #
-        # implement: YES? NO?
-
-        # find islands of binding sites around anchor gene
-        islands = find_islands(anchor_promoter, motifs, promoters, options)
-        logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
-
-        # return cluster predictions sorted by border abundance
-        # (most abundant --> "best" prediction)
-        cluster_predictions = sort_by_abundance(islands)
-        cluster_predictions = check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
-
-        store_clusters(anchor, cluster_predictions, seq_record)
-        break
-
-
 def store_clusters(anchor, clusters, seq_record):
-    """Store the borders of predicted clusters to the SeqRecord"""
+    """Store the borders of predicted clusters to a SeqRecord"""
     for i in xrange(len(clusters)):
         cluster = clusters[i]
         left = utils.get_all_features_of_type_with_query(
@@ -1169,6 +1142,7 @@ def store_clusters(anchor, clusters, seq_record):
         right = utils.get_all_features_of_type_with_query(
             # there should be no second gene with the same locus tag
             seq_record, "gene", "locus_tag", cluster["end"]["gene"])[0]
+
         new_feature = SeqFeature.SeqFeature(
             FeatureLocation(left.location.start, right.location.end), type = "cluster_border")
         new_feature.qualifiers = {
@@ -1198,37 +1172,36 @@ def store_clusters(anchor, clusters, seq_record):
         seq_record.features.append(new_feature)
 
 
-#def store_detection_details(rulesdict, seq_record):
-#    '''Store the details about why a cluster was detected'''
-#    clusters = utils.get_cluster_features(seq_record)
-#    for cluster in clusters:
-#        type_combo = utils.get_cluster_type(cluster)
-#        if '-' in type_combo:
-#            clustertypes = type_combo.split('-')
-#        else:
-#            clustertypes = [type_combo]
-#
-#        if not 'note' in cluster.qualifiers:
-#            cluster.qualifiers['note'] = []
-#        rule_string = "Detection rule(s) for this cluster type:"
-#        for clustertype in clustertypes:
-#            rule_string += " %s: (%s);" % (clustertype, rulesdict[clustertype][0])
-#
-#        cluster.qualifiers['note'].append(rule_string)
+### run methods ###
+def run_meme(meme_dir, options):
+    """Run MEME (in parallel) on each motif subdirectory"""
+    # FIXME for sure there is a more clever and elegant way to do this
+    # TODO move to utils/execute.py ?
+    # TODO options --> meme settings
+    exit_code = subprocess.call([
+        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "meme.py"),
+        meme_dir,
+        str(options.cpus)])
+    if exit_code != 0:
+        logging.error("meme.py discovered a problem (exit code {})".format(exit_code))
 
-#def _update_sec_met_entry(feature, results, clustertype, nseqdict):
-#    '''Update the sec_met entry for a feature'''
-#    result = "; ".join(["%s (E-value: %s, bitscore: %s, seeds: %s)" % (
-#        res.query_id, res.evalue, res.bitscore, nseqdict.get(res.query_id, '?')) for res in results])
-#
-#    if not 'sec_met' in feature.qualifiers:
-#        feature.qualifiers['sec_met'] = [
-#            "Type: %s" % clustertype,
-#            "Domains detected: %s" % (result),
-#            "Kind: biosynthetic"
-#        ]
-#    else:
-#        for ann in feature.qualifiers['sec_met']:
-#            if not ann.startswith("Domains detected"):
-#                continue
-#            ann += "Domains detected: %s" % (result)
+
+def run_fimo(meme_dir, fimo_dir, seq_record, options):
+    """Run MEME (in parallel) on each motif subdirectory"""
+    # TODO move to utils/execute.py ?
+    promoter_sequences = os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta")
+
+    if not os.path.exists(fimo_dir):
+        os.makedirs(fimo_dir)
+
+    # run FIMO
+    # FIXME for sure there is a more clever and elegant way to do this
+    exit_code = subprocess.call([
+        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "fimo.py"),
+        meme_dir,
+        fimo_dir,
+        promoter_sequences,
+        str(options.cpus),
+    ])
+    if exit_code != 0:
+        logging.error("fimo.py discovered a problem (exit code {})".format(exit_code))
