@@ -105,6 +105,7 @@ def detect(seq_record, options):
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     promoters = [];
     try:
+        # why these values? see "Wolf et al (2015): CASSIS and SMIPS ..."
         upstream_tss = 1000; # nucleotides upstream TSS
         downstream_tss = 50; # nucleotides downstream TSS
         promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
