@@ -1123,7 +1123,7 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
                     ignored_gene))
                 logging.warning("Gene {!r} could have effected the cluster prediction".format(
                     ignored_gene))
-                # sane = False
+                # sane = False # uncomment if you want alternatives for predictions with ignored genes, too
                 break
 
         checked_predictions.append(prediction)
