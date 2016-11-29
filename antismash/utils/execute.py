@@ -1,4 +1,4 @@
-'''Executable helpers for antiSMASH'''
+"""Executable helpers for antiSMASH"""
 import logging
 import subprocess
 try:
@@ -18,7 +18,7 @@ from antismash.config import get_config
 # following the subprocess names here.
 # pylint: disable=redefined-builtin
 def run(commands, input=None):
-    "Execute commands in a system-independent manner"
+    """Execute commands in a system-independent manner"""
 
     if input is not None:
         stdin_redir = subprocess.PIPE
@@ -39,7 +39,7 @@ def run(commands, input=None):
 
 
 def run_hmmsearch(query_hmmfile, target_sequence, use_tempfile=False):
-    "Run hmmsearch"
+    """Run hmmsearch"""
     config = get_config()
     command = ["hmmsearch", "--cpu", str(config.cpus),
                query_hmmfile]
@@ -65,7 +65,7 @@ def run_hmmsearch(query_hmmfile, target_sequence, use_tempfile=False):
 
 
 def run_hmmscan(target_hmmfile, query_sequence, opts=None):
-    "Run hmmscan"
+    """Run hmmscan"""
     config = get_config()
     command = ["hmmscan", "--cpu", str(config.cpus), "--nobias"]
     if opts is not None:
@@ -85,7 +85,7 @@ def run_hmmscan(target_hmmfile, query_sequence, opts=None):
 
 
 def run_hmmpfam2(query_hmmfile, target_sequence):
-    "Run hmmpfam2"
+    """Run hmmpfam2"""
     config = get_config()
     command = ["hmmpfam2", "--cpu", str(config.cpus),
                query_hmmfile, '-']
@@ -103,7 +103,7 @@ def run_hmmpfam2(query_hmmfile, target_sequence):
 
 
 def run_hmmpress(hmmfile):
-    "Run hmmpress"
+    """Run hmmpress"""
     command = ['hmmpress', hmmfile]
     try:
         out, err, retcode = run(command)
