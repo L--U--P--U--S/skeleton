@@ -85,7 +85,7 @@ def get_promoter_id(promoter):
 ### main method ###
 def detect(seq_record, options):
     """Use core genes (anchor genes) from hmmdetect as seeds to detect gene clusters"""
-    logging.info("Detecting gene clusters using CASSIS method")
+    logging.info("Detecting gene clusters using CASSIS")
 
     # TODO options? cassis settings/parameters?
 
@@ -109,12 +109,13 @@ def detect(seq_record, options):
         downstream_tss = 50; # nucleotides downstream TSS
         promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
     except (InvalidLocationError, DuplicatePromoterError):
+        logging.error("CASSIS discovered an error while working on the promoter sequences, skipping CASSIS analysis")
         return
     if len(promoters) == 0:
         return
 
     if len(promoters) < 3:
-        logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping cluster detection".format(seq_record.name))
+        logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping CASSIS analysis".format(seq_record.name))
         return
 
     if len(promoters) < 40:
