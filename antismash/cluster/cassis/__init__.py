@@ -20,10 +20,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio import SeqFeature
 from Bio.SeqFeature import FeatureLocation
 
-from antismash import (
-    utils,
-)
-
+from antismash import utils
 from antismash.utils.errors import (
     InvalidLocationError,
     DuplicatePromoterError,

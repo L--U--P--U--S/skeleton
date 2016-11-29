@@ -9,8 +9,8 @@ from antismash.utils.access import (
     get_gene_id,
     get_cluster_type,
     get_cluster_features,
-    features_overlap,
     get_all_features_of_type_with_query,
+    features_overlap,
 )
 from antismash.utils.execute import (
     run,
