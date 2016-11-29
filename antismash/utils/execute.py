@@ -6,6 +6,9 @@ try:
 except ImportError:
     from StringIO import StringIO
 import warnings
+import os
+import signal
+from multiprocessing import Pool
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -36,6 +39,35 @@ def run(commands, input=None):
         logging.debug("%r %r returned %r", commands, input[:40] if input is not None else None, os_err)
         raise
 # pylint: enable=redefined-builtin
+
+
+def run_p(options, args):
+    """Execute commands in a parallel manner"""
+    os.setpgid(0, 0)
+    p = Pool(options.cpus)
+    jobs = p.map_async(child_process, args)
+
+    try:
+        # 0xFFFF is just "a lot of seconds"
+        errors = jobs.get(0xFFFF)
+    except KeyboardInterrupt:
+        logging.error("Interrupted by user")
+        os.killpg(os.getpid(), signal.SIGTERM)
+        return 128
+
+    return errors
+
+
+def child_process(args):
+    """Called by multiprocessing's map or map_async method"""
+    try:
+        logging.debug("Calling {!r}".format(" ".join(args)))
+        p = subprocess.Popen(args) # actually only a chunk of args
+        p.communicate()
+    except KeyboardInterrupt:
+        logging.debug("{!r}: Ignoring interrupt".format(p))
+
+    return p.returncode
 
 
 def run_hmmsearch(query_hmmfile, target_sequence, use_tempfile=False):
@@ -111,3 +143,68 @@ def run_hmmpress(hmmfile):
         retcode = 1
         err = str(os_err)
     return out, err, retcode
+
+
+def run_meme(meme_dir, options):
+    """Set paths, check existing files and run MEME in parallel on each promoter set"""
+    args = []
+    for plus_minus in os.listdir(meme_dir):
+        input_file = os.path.join(meme_dir, plus_minus, "promoters.fasta")
+        output_file = os.path.join(meme_dir, plus_minus, "meme.xml")
+
+        # input file present and size not zero --> should be fine to use
+        if os.path.isfile(input_file) and os.path.getsize(input_file) > 0:
+            # output file already present and size not zero --> do not run MEME again on this one
+            if os.path.isfile(output_file) and os.path.getsize(output_file) > 0:
+                pass
+            else:
+                args.append([
+                    "meme", input_file,
+                    "-oc", os.path.dirname(input_file),
+                    "-dna",
+                    "-nostatus",
+                    "-mod", "anr",
+                    "-nmotifs", "1",
+                    "-minw", "6",
+                    "-maxw", "12",
+                    "-revcomp",
+                    "-evt", "1.0e+005",
+                ])
+
+    errors = run_p(options, args)
+    return sum(errors)
+
+
+def run_fimo(meme_dir, fimo_dir, seq_record, options):
+    """Set paths, check existing files and run FIMO in parallel on each predicted motif"""
+    if not os.path.exists(fimo_dir):
+        os.makedirs(fimo_dir)
+
+    args = []
+    for plus_minus in os.listdir(meme_dir):
+        motif_file = os.path.join(meme_dir, plus_minus, "meme.html")
+        sites_file = os.path.join(meme_dir, plus_minus, "binding_sites.fasta")
+        output_file = os.path.join(fimo_dir, plus_minus, "fimo.txt")
+        output_dir = os.path.join(fimo_dir, plus_minus)
+
+        # input file and binding sites file present and size not zero --> should be fine to use
+        if (os.path.isfile(motif_file)
+                and os.path.getsize(motif_file) > 0
+                and os.path.isfile(sites_file)
+                and os.path.getsize(sites_file) > 0):
+            # output file already present and size not zero --> do not run FIMO again on this one
+            if os.path.isfile(output_file) and os.path.getsize(output_file) > 0:
+                pass
+            else:
+                args.append([
+                    "fimo",
+                    "-verbosity", "1",
+                    "-motif", "1",
+                    "-thresh", "0.00006",
+                    "-oc", output_dir,
+                    motif_file,
+                    os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta"),
+                ])
+
+    errors = run_p(options, args)
+    return sum(errors)

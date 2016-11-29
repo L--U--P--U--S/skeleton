@@ -18,6 +18,8 @@ from antismash.utils.execute import (
     run_hmmscan,
     run_hmmpress,
     run_hmmpfam2,
+    run_meme,
+    run_fimo,
 )
 from antismash.utils.io import (
     create_outputfolder,

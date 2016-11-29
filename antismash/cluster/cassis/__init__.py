@@ -11,7 +11,6 @@
 
 import logging
 import os
-import subprocess
 import csv
 from xml.etree import cElementTree as ElementTree
 
@@ -131,9 +130,12 @@ def detect(seq_record, options):
 
         # predict motifs with MEME ("de novo")
         meme_dir = os.path.join(options.outputfoldername, "meme", anchor)
-        motifs = prepare_motifs(meme_dir, anchor_promoter, promoters)
-        run_meme(meme_dir, options)
-        motifs = filter_meme_results(meme_dir, motifs, anchor)
+        promoter_sets = get_promoter_sets(meme_dir, anchor_promoter, promoters)
+        exit_code = utils.run_meme(meme_dir, options)
+        if exit_code != 0:
+            logging.error("MEME discovered a problem (exit code {}), skipping this anchor gene".format(exit_code))
+            continue
+        motifs = filter_meme_results(meme_dir, promoter_sets, anchor)
 
         if len(motifs) == 0:
             logging.info("Could not predict motifs around {!r}, skipping this anchor gene".format(anchor))
@@ -141,7 +143,10 @@ def detect(seq_record, options):
 
         # search motifs with FIMO ("scanning")
         fimo_dir = os.path.join(options.outputfoldername, "fimo", anchor)
-        run_fimo(meme_dir, fimo_dir, seq_record, options)
+        exit_code = utils.run_fimo(meme_dir, fimo_dir, seq_record, options)
+        if exit_code != 0:
+            logging.error("FIMO discovered a problem (exit code {}), skipping this anchor gene".format(exit_code))
+            continue
         motifs = filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options)
 
         if len(motifs) == 0:
@@ -1169,38 +1174,3 @@ def store_clusters(anchor, clusters, seq_record):
             new_feature.qualifiers["note"] = "alternative prediction ({}) for anchor gene {}".format(i, anchor)
 
         seq_record.features.append(new_feature)
-
-
-### run methods ###
-def run_meme(meme_dir, options):
-    """Run MEME (in parallel) on each motif subdirectory"""
-    # FIXME for sure there is a more clever and elegant way to do this
-    # TODO move to utils/execute.py ?
-    # TODO options --> meme settings
-    exit_code = subprocess.call([
-        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "meme.py"),
-        meme_dir,
-        str(options.cpus)])
-    if exit_code != 0:
-        logging.error("meme.py discovered a problem (exit code {})".format(exit_code))
-
-
-def run_fimo(meme_dir, fimo_dir, seq_record, options):
-    """Run MEME (in parallel) on each motif subdirectory"""
-    # TODO move to utils/execute.py ?
-    promoter_sequences = os.path.join(options.outputfoldername, seq_record.name + "_promoter_sequences.fasta")
-
-    if not os.path.exists(fimo_dir):
-        os.makedirs(fimo_dir)
-
-    # run FIMO
-    # FIXME for sure there is a more clever and elegant way to do this
-    exit_code = subprocess.call([
-        "python", os.path.join(os.path.dirname(os.path.realpath(__file__)), "fimo.py"),
-        meme_dir,
-        fimo_dir,
-        promoter_sequences,
-        str(options.cpus),
-    ])
-    if exit_code != 0:
-        logging.error("fimo.py discovered a problem (exit code {})".format(exit_code))
