@@ -160,7 +160,7 @@ def detect(seq_record, options):
         # implement: YES? NO?
 
         # find islands of binding sites around anchor gene
-        islands = find_islands(anchor_promoter, motifs, promoters, options)
+        islands = get_islands(anchor_promoter, motifs, promoters, options)
         logging.debug("{} cluster predictions for {!r}".format(len(islands), anchor))
 
         # return cluster predictions sorted by border abundance
@@ -664,9 +664,9 @@ def get_anchor_promoter(anchor, promoters):
     return None
 
 
-def prepare_motifs(meme_dir, anchor_promoter, promoters):
+def get_promoter_sets(meme_dir, anchor_promoter, promoters):
     """Prepare sets of promoter sequences and motif subdirectories"""
-    motifs = []
+    promoter_sets = []
 
     if not os.path.exists(meme_dir):
         os.makedirs(meme_dir)
@@ -688,7 +688,7 @@ def prepare_motifs(meme_dir, anchor_promoter, promoters):
         # discard promoter sets, which reappear due to truncation
         if (start_index, end_index) not in indices:
             indices.add((start_index, end_index))
-            motifs.append({"plus": pm["plus"], "minus": pm["minus"], "score": None})
+            promoter_sets.append({"plus": pm["plus"], "minus": pm["minus"], "score": None})
 
             pm_dir = os.path.join(meme_dir, mprint(pm["plus"], pm["minus"]))
             if not os.path.exists(pm_dir):
@@ -707,12 +707,12 @@ def prepare_motifs(meme_dir, anchor_promoter, promoters):
         else:
             logging.debug("Duplicate promoter set " + mprint(pm["plus"], pm["minus"]))
 
-    return motifs
+    return promoter_sets
 
 
-def filter_meme_results(meme_dir, motifs, anchor):
+def filter_meme_results(meme_dir, promoter_sets, anchor):
     """Analyse and filter MEME results"""
-    for motif in motifs:
+    for motif in promoter_sets:
         xml_file = os.path.join(meme_dir, mprint(motif["plus"], motif["minus"]), "meme.xml")
         e = ElementTree.parse(xml_file).getroot()
         reason = e.find("model/reason_for_stopping").text
@@ -755,7 +755,7 @@ def filter_meme_results(meme_dir, motifs, anchor):
         else:
             logging.error("MEME stopped unexpectedly (reason: " + reason + ")")
 
-    return filter(lambda m: m["score"] is not None, motifs)
+    return filter(lambda m: m["score"] is not None, promoter_sets)
 
 
 def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
@@ -806,7 +806,7 @@ def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
     return filter(lambda m: m["hits"] is not None, motifs)
 
 
-def find_islands(anchor_promoter, motifs, promoters, options):
+def get_islands(anchor_promoter, motifs, promoters, options):
     """Find islands of binding sites (previously found by FIMO) around anchor gene to define cluster borders"""
     max_gap_length = 2 # TODO options
     islands = []
