@@ -208,6 +208,7 @@ def find_clusters(seq_record, rulesdict):
             else:
                 loc = FeatureLocation(feature.location.end, start)
             new_cluster = SeqFeature(loc, type="cluster")
+            new_cluster.qualifiers['tool'] = ['hmmdetect']
             new_cluster.qualifiers['product'] = [clustertype]
             new_cluster.qualifiers['note'] = ["Cluster number: " + str(clusternr)]
             clusternr += 1

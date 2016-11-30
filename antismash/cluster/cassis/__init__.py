@@ -1148,29 +1148,29 @@ def store_clusters(anchor, clusters, seq_record):
             seq_record, "gene", "locus_tag", cluster["end"]["gene"])[0]
 
         new_feature = SeqFeature.SeqFeature(
-            FeatureLocation(left.location.start, right.location.end), type = "cluster_border")
+            FeatureLocation(left.location.start, right.location.end), type = "cluster")
         new_feature.qualifiers = {
-            "tool"             : "cassis",
-            "anchor"           : anchor,
-            "abundance"        : cluster["start"]["abundance"] + cluster["end"]["abundance"],
-            "motif_score"      : "{:.1e}".format(float(cluster["start"]["score"]) + float(cluster["end"]["score"])),
-            "gene_left"        : cluster["start"]["gene"],
-            "promoter_left"    : cluster["start"]["promoter"],
-            "abundance_left"   : cluster["start"]["abundance"],
-            "motif_left"       : mprint(cluster["start"]["plus"], cluster["start"]["minus"]),
-            "motif_score_left" : "{:.1e}".format(float(cluster["start"]["score"])),
-            "gene_right"       : cluster["end"]["gene"],
-            "promoter_right"   : cluster["end"]["promoter"],
-            "abundance_right"  : cluster["end"]["abundance"],
-            "motif_right"      : mprint(cluster["end"]["plus"], cluster["end"]["minus"]),
-            "motif_score_right": "{:.1e}".format(float(cluster["end"]["score"])),
-            "genes"            : cluster["genes"],
-            "promoters"        : cluster["promoters"],
+            "tool"             : ["cassis"],
+            "anchor"           : [anchor],
+            "abundance"        : [cluster["start"]["abundance"] + cluster["end"]["abundance"]],
+            "motif_score"      : ["{:.1e}".format(float(cluster["start"]["score"]) + float(cluster["end"]["score"]))],
+            "gene_left"        : [cluster["start"]["gene"]],
+            "promoter_left"    : [cluster["start"]["promoter"]],
+            "abundance_left"   : [cluster["start"]["abundance"]],
+            "motif_left"       : [mprint(cluster["start"]["plus"], cluster["start"]["minus"])],
+            "motif_score_left" : ["{:.1e}".format(float(cluster["start"]["score"]))],
+            "gene_right"       : [cluster["end"]["gene"]],
+            "promoter_right"   : [cluster["end"]["promoter"]],
+            "abundance_right"  : [cluster["end"]["abundance"]],
+            "motif_right"      : [mprint(cluster["end"]["plus"], cluster["end"]["minus"])],
+            "motif_score_right": ["{:.1e}".format(float(cluster["end"]["score"]))],
+            "genes"            : [cluster["genes"]],
+            "promoters"        : [cluster["promoters"]],
         }
 
         if i == 0:
-            new_feature.qualifiers["note"] = "best prediction (most abundant) for anchor gene {}".format(anchor)
+            new_feature.qualifiers["note"] = ["best prediction (most abundant) for anchor gene {}".format(anchor)]
         else:
-            new_feature.qualifiers["note"] = "alternative prediction ({}) for anchor gene {}".format(i, anchor)
+            new_feature.qualifiers["note"] = ["alternative prediction ({}) for anchor gene {}".format(i, anchor)]
 
         seq_record.features.append(new_feature)
