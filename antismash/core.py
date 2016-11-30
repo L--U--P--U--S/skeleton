@@ -4,6 +4,7 @@ import logging
 from antismash.utils.access import (
     get_cluster_features,
     sort_features,
+    get_all_features_of_type,
 )
 
 
@@ -34,6 +35,10 @@ def detect_gene_clusters(seq_record, plugins, options):
     if options.debug:
         for feature in get_cluster_features(seq_record):
             logging.debug(feature)
+
+        # for feature in get_all_features_of_type(seq_record, "promoter"):
+            # logging.debug(feature)
+
 
 
 def store_results(seq_records, plugins, options):

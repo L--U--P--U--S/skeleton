@@ -108,16 +108,18 @@ def detect(seq_record, options):
     except (InvalidLocationError, DuplicatePromoterError):
         logging.error("CASSIS discovered an error while working on the promoter sequences, skipping CASSIS analysis")
         return
-    if len(promoters) == 0:
-        return
 
+    if len(promoters) == 0:
+        logging.error("CASSIS found zero promoter regions, skipping CASSIS analysis")
+        return
     if len(promoters) < 3:
         logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping CASSIS analysis".format(seq_record.name))
         return
-
     if len(promoters) < 40:
         logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
         logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
+
+    store_promoters(promoters, seq_record)
 
     for i in xrange(len(anchor_genes)):
         anchor = anchor_genes[i]
@@ -1134,6 +1136,23 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
             break
 
     return checked_predictions
+
+
+### storage methods ###
+def store_promoters(promoters, seq_record):
+    """Store information about promoter sequences to a SeqRecord"""
+    for promoter in promoters:
+        new_feature = SeqFeature.SeqFeature(
+            FeatureLocation(promoter["start"], promoter["end"]), type = "promoter")
+        new_feature.qualifiers = {
+            "locus_tag" : promoter["id"], # already a list with one or two elements
+            "seq"       : [str(promoter["seq"])], # TODO save string or Seq object?
+        }
+
+        if len(promoter["id"]) > 1:
+            new_feature.qualifiers["note"] = ["bidirectional promoter"]
+
+        seq_record.features.append(new_feature)
 
 
 def store_clusters(anchor, clusters, seq_record):
