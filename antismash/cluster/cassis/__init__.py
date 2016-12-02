@@ -244,6 +244,9 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                         "id": [utils.get_gene_id(genes[i])],
                         "start": genes[i].location.start - upstream_tss,
                         "end": genes[i].location.start + downstream_tss
+                        # fuzzy (>|<) gene locations will be transformed to exact promoter locations
+                        # we could save the fuzzy locations for promoters, too, via a FeatureLocation object
+                        # but we use/calculate with the exact promoter locations anyway, here and later on
                     })
                 #2
                 elif (genes[i].location.start - upstream_tss < 0
@@ -1143,7 +1146,9 @@ def store_promoters(promoters, seq_record):
     """Store information about promoter sequences to a SeqRecord"""
     for promoter in promoters:
         new_feature = SeqFeature.SeqFeature(
-            FeatureLocation(promoter["start"], promoter["end"]), type = "promoter")
+            # 1-based GenBank vs. 0-based Python format --> -1 is important!
+            # see http://biopython.org/DIST/docs/api/Bio.SeqFeature.FeatureLocation-class.html
+            FeatureLocation(promoter["start"] - 1, promoter["end"]), type = "promoter")
         new_feature.qualifiers = {
             "locus_tag" : promoter["id"], # already a list with one or two elements
             "seq"       : [str(promoter["seq"])], # TODO save string or Seq object?
@@ -1159,11 +1164,18 @@ def store_clusters(anchor, clusters, seq_record):
     """Store the borders of predicted clusters to a SeqRecord"""
     for i in xrange(len(clusters)):
         cluster = clusters[i]
+        # cluster borders returned by hmmdetect are based on CDS features
+        # see find_clusters() in hmmdetect's __init__.py
+        # in contrast, cluster borders returned by cassis are based on gene features
+        # --> hmmdetect derived clusters have excat loctions, like the CDSs have
+        # --> cassis derived clusters may have fuzzy locations, like the genes have
+        #
+        # utils.get_all_features_of_type_with_query() returns a list
+        # there should be no second gene with the same locus tag
+        # --> always take the first [0] element of the return value
         left = utils.get_all_features_of_type_with_query(
-            # there should be no second gene with the same locus tag
             seq_record, "gene", "locus_tag", cluster["start"]["gene"])[0]
         right = utils.get_all_features_of_type_with_query(
-            # there should be no second gene with the same locus tag
             seq_record, "gene", "locus_tag", cluster["end"]["gene"])[0]
 
         new_feature = SeqFeature.SeqFeature(
