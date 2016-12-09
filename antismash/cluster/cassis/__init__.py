@@ -114,11 +114,11 @@ def detect(seq_record, options):
         logging.error("CASSIS found zero promoter regions, skipping CASSIS analysis")
         return
     if len(promoters) < 3:
-        logging.warning("Sequence {!r} yields less than 3 promoter regions, skipping CASSIS analysis".format(seq_record.name))
+        logging.info("Sequence {!r} yields less than 3 promoter regions, skipping CASSIS analysis".format(seq_record.name))
         return
     if len(promoters) < 40:
-        logging.warning("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
-        logging.warning("Cluster detection on small sequences may lead to incomplete cluster predictions")
+        logging.info("Sequence {!r} yields only {} promoter regions".format(seq_record.name, len(promoters)))
+        logging.info("Cluster detection on small sequences may lead to incomplete cluster predictions")
 
     store_promoters(promoters, seq_record)
 
@@ -129,7 +129,7 @@ def detect(seq_record, options):
 
         anchor_promoter = get_anchor_promoter(anchor, promoters)
         if anchor_promoter is None:
-            logging.warning("No promoter region for {!r}, skipping this anchor gene".format(anchor))
+            logging.info("No promoter region for {!r}, skipping this anchor gene".format(anchor))
             continue
 
         # predict motifs with MEME ("de novo")
@@ -1116,25 +1116,25 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
 
         # warn if cluster prediction right at or next to record (~ contig) border
         if start_index_genes < 10:
-            logging.warning(
+            logging.info(
                 "Upstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
             sane = False
         if end_index_genes > len(all_genes) - 10:
-            logging.warning(
+            logging.info(
                 "Downstream cluster border located at or next to sequence record border, prediction could have been truncated by record border")
             sane = False
 
         # warn if cluster prediction too short (includes less than 3 genes)
         if prediction["genes"] < 3:
-            logging.warning("Cluster is very short (less than 3 genes). Prediction may be questionable.")
+            logging.info("Cluster is very short (less than 3 genes). Prediction may be questionable.")
             sane = False
 
         # warn if ignored gene (overlapping with anthor gene, see ignore_overlapping()) would have been part of the cluster
         for ignored_gene in map(lambda g: utils.get_gene_id(g), ignored_genes):
             if ignored_gene in all_genes[start_index_genes : end_index_genes + 1]:
-                logging.warning("Gene {!r} is part of the predicted cluster, but it is overlapping with another gene and was ignored".format(
+                logging.info("Gene {!r} is part of the predicted cluster, but it is overlapping with another gene and was ignored".format(
                     ignored_gene))
-                logging.warning("Gene {!r} could have effected the cluster prediction".format(
+                logging.info("Gene {!r} could have effected the cluster prediction".format(
                     ignored_gene))
                 # sane = False # uncomment if you want alternatives for predictions with ignored genes, too
                 break
