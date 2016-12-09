@@ -13,6 +13,7 @@ import logging
 import os
 import csv
 from xml.etree import cElementTree as ElementTree
+import shutil
 
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
@@ -121,6 +122,7 @@ def detect(seq_record, options):
 
     store_promoters(promoters, seq_record)
 
+    cluster_predictions = {} # {anchor gene : cluster predictions}
     for i in xrange(len(anchor_genes)):
         anchor = anchor_genes[i]
         logging.info("Detecting cluster around anchor gene {!r} ({} of {})".format(anchor, i + 1, len(anchor_genes)))
@@ -169,10 +171,14 @@ def detect(seq_record, options):
 
         # return cluster predictions sorted by border abundance
         # (most abundant --> "best" prediction)
-        cluster_predictions = sort_by_abundance(islands)
-        cluster_predictions = check_cluster_predictions(cluster_predictions, seq_record, promoters, ignored_genes)
+        cluster_predictions[anchor] = sort_by_abundance(islands)
+        cluster_predictions[anchor] = check_cluster_predictions(cluster_predictions[anchor], seq_record, promoters, ignored_genes)
 
-        store_clusters(anchor, cluster_predictions, seq_record)
+        store_clusters(anchor, cluster_predictions[anchor], seq_record)
+
+    if options.cleanup:
+        logging.debug("Cleaning up MEME and FIMO output directories")
+        cleanup_outdir(anchor_genes, cluster_predictions, options)
 
 
 ### additional methods ###
@@ -1139,6 +1145,30 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
             break
 
     return checked_predictions
+
+
+def cleanup_outdir(anchor_genes, cluster_predictions, options):
+    """Delete unnecessary files to free disk space"""
+    all_motifs = set()
+    for motif in _plus_minus:
+        all_motifs.add(mprint(motif["plus"], motif["minus"]))
+
+    for anchor in anchor_genes:
+        if anchor in cluster_predictions:
+            used_motifs = set()
+            for cluster in cluster_predictions[anchor]:
+                used_motifs.add(mprint(cluster["start"]["plus"], cluster["start"]["minus"]))
+                used_motifs.add(mprint(cluster["end"]["plus"], cluster["end"]["minus"]))
+            unused_motifs = all_motifs.difference(used_motifs)
+            # only remove directories from "unused" motifs (no cluster prediction)
+            for directory in unused_motifs:
+                shutil.rmtree(os.path.join(options.outputfoldername, "meme", anchor, directory), ignore_errors=True)
+                shutil.rmtree(os.path.join(options.outputfoldername, "fimo", anchor, directory), ignore_errors=True)
+        else:
+            # all motifs are "unused" (not a single prediction for this anchor gene)
+            # --> remove anchor genes directory, including all motif subdirectories
+            shutil.rmtree(os.path.join(options.outputfoldername, "meme", anchor), ignore_errors=True)
+            shutil.rmtree(os.path.join(options.outputfoldername, "fimo", anchor), ignore_errors=True)
 
 
 ### storage methods ###
