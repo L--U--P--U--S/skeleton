@@ -36,10 +36,6 @@ def detect_gene_clusters(seq_record, plugins, options):
         for feature in get_cluster_features(seq_record):
             logging.debug(feature)
 
-        # for feature in get_all_features_of_type(seq_record, "promoter"):
-            # logging.debug(feature)
-
-
 
 def store_results(seq_records, plugins, options):
     '''Store all the results'''
