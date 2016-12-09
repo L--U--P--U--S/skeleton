@@ -18,7 +18,7 @@ def main():
     '''Configure and parse the CLI'''
     parser = argparse.ArgumentParser()
 
-    # we actually want at least 1 sequence file, but don't wanto to check here
+    # we actually want at least 1 sequence file, but don't want to check here
     # this allows us to run --check-prereqs and stuff.
     parser.add_argument('sequences',
                         metavar='sequence',
