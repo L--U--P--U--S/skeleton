@@ -799,7 +799,7 @@ def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
         percentage = float(len(motif["hits"])) / float(len(promoters)) * 100 # float!
         if percentage == 0.0:
             # too low
-            logging.debug("Motif {}; occurs in {} promoters (no hits)".format(
+            logging.debug("FIMO: motif {}; occurs in {} promoters (no hits)".format(
                 mprint(motif["plus"], motif["minus"]), len(motif["hits"])))
             motif["hits"] = None
         elif percentage > 14.0: # TODO options
