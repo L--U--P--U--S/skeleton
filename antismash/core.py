@@ -4,7 +4,6 @@ import logging
 from antismash.utils.access import (
     get_cluster_features,
     sort_features,
-    get_all_features_of_type,
 )
 
 
