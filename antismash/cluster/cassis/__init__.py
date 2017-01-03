@@ -702,22 +702,26 @@ def get_promoter_sets(meme_dir, anchor_promoter, promoters):
         # discard promoter sets, which reappear due to truncation
         if (start_index, end_index) not in indices:
             indices.add((start_index, end_index))
-            promoter_sets.append({"plus": pm["plus"], "minus": pm["minus"], "score": None})
 
-            pm_dir = os.path.join(meme_dir, mprint(pm["plus"], pm["minus"]))
-            if not os.path.exists(pm_dir):
-                os.makedirs(pm_dir)
+            # check (again, compare init of _plus_minus) if the promoter set has at least 4 promoters
+            if end_index - start_index + 1 >= 4:
+                promoter_sets.append({"plus": pm["plus"], "minus": pm["minus"], "score": None})
 
-            # write promoter sequences to fasta file, in respective "plus-minus" subdir
-            with open(os.path.join(pm_dir, "promoters.fasta"), "w") as pm_handle:
-                for i in xrange(start_index, end_index + 1):
-                    seq = SeqRecord(promoters[i]["seq"],
-                        id = get_promoter_id(promoters[i]),
-                        description = "length={}bp".format(len(promoters[i]["seq"])))
-                    if i == anchor_promoter: # mark anchor gene (must be part of id, otherwise MEME woun't recognize it)
-                        # seq.description += " ANCHOR"
-                        seq.id += "__ANCHOR"
-                    SeqIO.write(seq, pm_handle, "fasta")
+                pm_dir = os.path.join(meme_dir, mprint(pm["plus"], pm["minus"]))
+                if not os.path.exists(pm_dir):
+                    os.makedirs(pm_dir)
+
+                # write promoter sequences to fasta file, in respective "plus-minus" subdir
+                with open(os.path.join(pm_dir, "promoters.fasta"), "w") as pm_handle:
+                    for i in xrange(start_index, end_index + 1):
+                        seq = SeqRecord(promoters[i]["seq"],
+                            id = get_promoter_id(promoters[i]),
+                            description = "length={}bp".format(len(promoters[i]["seq"])))
+                        if i == anchor_promoter: # mark anchor gene
+                            seq.id += "__ANCHOR" # must be part of id, otherwise MEME woun't recognize it
+                        SeqIO.write(seq, pm_handle, "fasta")
+            else:
+                logging.debug("Too short promoter set " + mprint(pm["plus"], pm["minus"]))
         else:
             logging.debug("Duplicate promoter set " + mprint(pm["plus"], pm["minus"]))
 
