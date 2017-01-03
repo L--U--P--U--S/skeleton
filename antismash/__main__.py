@@ -63,11 +63,11 @@ def main():
                         action='store_true',
                         default=False,
                         help="Display the version number and exit.")
-    parser.add_argument('-c', '--cleanup',
-                        dest='cleanup',
+    parser.add_argument('--skip-cleanup',
+                        dest='skip_cleanup',
                         action='store_true',
                         default=False,
-                        help="Cleanup output directories after cluster prediction to save disk space.")
+                        help="Don't clean up temporary result files")
     # CASSIS-specific note:
     # CASSIS skips MEME and FIMO calls if the result files are already present in the output directory
     # this vastly shortens the run time of CASSIS

@@ -177,7 +177,7 @@ def detect(seq_record, options):
 
         store_clusters(anchor, cluster_predictions[anchor], seq_record)
 
-    if options.cleanup:
+    if not options.skip_cleanup:
         logging.debug("Cleaning up MEME and FIMO output directories")
         cleanup_outdir(anchor_genes, cluster_predictions, options)
 
@@ -1197,6 +1197,7 @@ def store_promoters(promoters, seq_record):
 
 def store_clusters(anchor, clusters, seq_record):
     """Store the borders of predicted clusters to a SeqRecord"""
+    cluster_features = utils.get_cluster_features(seq_record)
     for i in xrange(len(clusters)):
         cluster = clusters[i]
         # cluster borders returned by hmmdetect are based on CDS features
@@ -1214,7 +1215,7 @@ def store_clusters(anchor, clusters, seq_record):
             seq_record, "gene", "locus_tag", cluster["end"]["gene"])[0]
 
         new_feature = SeqFeature.SeqFeature(
-            FeatureLocation(left.location.start, right.location.end), type = "cluster")
+            FeatureLocation(left.location.start, right.location.end), type = "cluster_border")
         new_feature.qualifiers = {
             "tool"             : ["cassis"],
             "anchor"           : [anchor],
@@ -1240,3 +1241,21 @@ def store_clusters(anchor, clusters, seq_record):
             new_feature.qualifiers["note"] = ["alternative prediction ({}) for anchor gene {}".format(i, anchor)]
 
         seq_record.features.append(new_feature)
+
+        # only extend existing clusters for the best prediction
+        if i != 0:
+            continue
+
+        for existing_cluster in cluster_features:
+            if not utils.features_overlap(new_feature, existing_cluster):
+                continue
+
+            # extend existing cluster start location
+            if existing_cluster.location.start > new_feature.location.start:
+                existing_cluster.location = FeatureLocation(int(new_feature.location.start),
+                                                            existing_cluster.location.end)
+
+            # extend cluster end location
+            if existing_cluster.location.end < new_feature.location.end:
+                existing_cluster.location = FeatureLocation(existing_cluster.location.start,
+                                                            int(new_feature.location.end))
