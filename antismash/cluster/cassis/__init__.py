@@ -670,7 +670,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
 
 def get_anchor_promoter(anchor, promoters):
     """Find the name of the promoter which includes the anchor gene"""
-    # the promoter ID string is not equal to the anchor ID string!
+    # the promoter ID is not (necessarily) equal to the anchor ID!
     for i in xrange(len(promoters)):
         if anchor in promoters[i]["id"]:
             return i
@@ -773,7 +773,7 @@ def filter_meme_results(meme_dir, promoter_sets, anchor):
 
 
 def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
-    """Analyse and filter MEME results"""
+    """Analyse and filter FIMO results"""
     for motif in motifs:
         motif["hits"] = {}
         with open(os.path.join(fimo_dir, mprint(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle:
@@ -992,7 +992,7 @@ def get_islands(anchor_promoter, motifs, promoters, options):
 
 
 def sort_by_abundance(islands):
-    """sort upstream (start) and downstream (end) borders of islands by abundance"""
+    """Sort upstream (start) and downstream (end) borders of islands by abundance"""
     # count border abundance
     # start/end are treated independently!
     starts = {}
