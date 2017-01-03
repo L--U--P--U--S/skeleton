@@ -47,6 +47,10 @@ for plus in range(16):
         if plus + minus + 1 >= 4:
             _plus_minus.append({"plus": plus, "minus": minus})
 
+# why these values? see "Wolf et al (2015): CASSIS and SMIPS ..."
+_upstream_tss = 1000; # nucleotides upstream TSS
+_downstream_tss = 50; # nucleotides downstream TSS
+
 
 ### utility methods ###
 def check_prereqs(options):
@@ -102,10 +106,7 @@ def detect(seq_record, options):
     # compute promoter sequences/regions --> necessary for motif prediction (MEME and FIMO input)
     promoters = [];
     try:
-        # why these values? see "Wolf et al (2015): CASSIS and SMIPS ..."
-        upstream_tss = 1000; # nucleotides upstream TSS
-        downstream_tss = 50; # nucleotides downstream TSS
-        promoters = get_promoters(seq_record, genes, upstream_tss, downstream_tss, options)
+        promoters = get_promoters(seq_record, genes, _upstream_tss, _downstream_tss, options)
     except (InvalidLocationError, DuplicatePromoterError):
         logging.error("CASSIS discovered an error while working on the promoter sequences, skipping CASSIS analysis")
         return
