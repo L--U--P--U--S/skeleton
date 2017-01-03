@@ -597,10 +597,10 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
                     raise InvalidLocationError
 
         # negative start position or stop position "beyond" record --> might happen in very small records
-        if promoters[-1]["start"] < 1:
-            promoters[-1]["start"] = 1
-        if promoters[-1]["end"] > record_seq_length:
-            promoters[-1]["end"] = record_seq_length
+        if promoters[-1]["start"] < 0:
+            promoters[-1]["start"] = 0
+        if promoters[-1]["end"] > record_seq_length - 1:
+            promoters[-1]["end"] = record_seq_length - 1
 
         # write promoter positions and sequences to file
         if not skip:
@@ -645,7 +645,7 @@ def get_promoters(seq_record, genes, upstream_tss, downstream_tss, options):
 
                 # write promoter positions to file
                 pos_handle.write("\t".join(map(str,
-                    [len(promoters), get_promoter_id(promoters[-1]), promoters[-1]["start"], promoters[-1]["end"], promoter_length])) + "\n")
+                    [len(promoters), get_promoter_id(promoters[-1]), promoters[-1]["start"] + 1, promoters[-1]["end"] + 1, promoter_length])) + "\n")
 
                 # write promoter sequences to file
                 SeqIO.write(
