@@ -1086,12 +1086,13 @@ def check_cluster_predictions(cluster_predictions, seq_record, promoters, ignore
 
         # find indices of first and last GENE of the cluster prediction in all genes
         all_genes = map(lambda g: utils.get_gene_id(g), utils.get_all_features_of_type(seq_record, "gene"))
+
         start_index_genes = None
         end_index_genes = None
         for i in xrange(len(all_genes)):
-            if not start_index_genes and prediction["start"]["gene"] is all_genes[i]:
+            if not start_index_genes and prediction["start"]["gene"] == all_genes[i]:
                 start_index_genes = i
-            if not end_index_genes and prediction["end"]["gene"] is all_genes[i]:
+            if not end_index_genes and prediction["end"]["gene"] == all_genes[i]:
                 end_index_genes = i
             if start_index_genes and end_index_genes:
                 break
