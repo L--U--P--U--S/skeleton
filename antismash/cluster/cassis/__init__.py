@@ -1012,17 +1012,17 @@ def sort_by_abundance(islands):
         else:
             ends[i["end"]["id"][-1]] = {"abund": 1}
 
-        # also keep track of motif score
-        # --> used to sort by score if same abundance occurs more than once
-        starts[i["start"]["id"][0]]["mscore"] = i["motif"]["score"]
-        ends[i["end"]["id"][-1]]["mscore"] = i["motif"]["score"]
-
-        # finally, save motif "names"
-        # --> just nice to have information for showing the results later on
-        starts[i["start"]["id"][0]]["plus"] = i["motif"]["plus"]
-        starts[i["start"]["id"][0]]["minus"] = i["motif"]["minus"]
-        ends[i["end"]["id"][-1]]["plus"] = i["motif"]["plus"]
-        ends[i["end"]["id"][-1]]["minus"] = i["motif"]["minus"]
+        # keep track of motif score --> to sort by score if same abundance occurs more than once
+        # AND
+        # save motif "names" (plus, minus) --> additional info for showing the results later on
+        if "mscore" not in starts[i["start"]["id"][0]] or float(i["motif"]["score"]) < float(starts[i["start"]["id"][0]]["mscore"]):
+            starts[i["start"]["id"][0]]["mscore"] = i["motif"]["score"]
+            starts[i["start"]["id"][0]]["plus"] = i["motif"]["plus"]
+            starts[i["start"]["id"][0]]["minus"] = i["motif"]["minus"]
+        if "mscore" not in ends[i["end"]["id"][-1]] or float(i["motif"]["score"]) < float(ends[i["end"]["id"][-1]]["mscore"]):
+            ends[i["end"]["id"][-1]]["mscore"] = i["motif"]["score"]
+            ends[i["end"]["id"][-1]]["plus"] = i["motif"]["plus"]
+            ends[i["end"]["id"][-1]]["minus"] = i["motif"]["minus"]
 
     # compute sum of start and end abundance, remove duplicates, sort descending
     abundances_sum_sorted = sorted(set([s["abund"] + e["abund"] for s in starts.values() for e in ends.values()]), reverse=True)
