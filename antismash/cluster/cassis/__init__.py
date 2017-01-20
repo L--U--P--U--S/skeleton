@@ -1204,7 +1204,7 @@ def store_clusters(anchor, clusters, seq_record):
         # cluster borders returned by hmmdetect are based on CDS features
         # see find_clusters() in hmmdetect's __init__.py
         # in contrast, cluster borders returned by cassis are based on gene features
-        # --> hmmdetect derived clusters have excat loctions, like the CDSs have
+        # --> hmmdetect derived clusters have exact loctions, like the CDSs have
         # --> cassis derived clusters may have fuzzy locations, like the genes have
         #
         # utils.get_all_features_of_type_with_query() returns a list
