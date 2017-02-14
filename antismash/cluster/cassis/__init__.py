@@ -778,6 +778,10 @@ def filter_meme_results(meme_dir, promoter_sets, anchor):
 
 def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
     """Analyse and filter FIMO results"""
+    # TODO command-line option?
+    if not hasattr(options, "max_percentage"):
+        options.max_percentage = 14.0
+
     for motif in motifs:
         motif["hits"] = {}
         with open(os.path.join(fimo_dir, mprint(motif["plus"], motif["minus"]), "fimo.txt"), "r") as handle:
@@ -807,7 +811,7 @@ def filter_fimo_results(motifs, fimo_dir, promoters, anchor_promoter, options):
             logging.debug("FIMO: motif {}; occurs in {} promoters (no hits)".format(
                 mprint(motif["plus"], motif["minus"]), len(motif["hits"])))
             motif["hits"] = None
-        elif percentage > 14.0: # TODO options
+        elif percentage > options.max_percentage:
             # too high
             logging.debug("FIMO: {}; occurs in {} promoters; {:.2f}% of all promoters (too many)".format(
                 mprint(motif["plus"], motif["minus"]), len(motif["hits"]), percentage))
