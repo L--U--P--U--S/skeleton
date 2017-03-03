@@ -6,8 +6,7 @@ the full antiSMASH script up and running.
 
 **Note:** So far, only cluster detection plugins are supported.
 
-Working with the skeleton
--------------------------
+**Note2:** This is a copy of https://bitbucket.org/kblin/skeleton - adding a python implementation of CASSIS (https://sbi.hki-jena.de/cassis/)
 
 
 License
